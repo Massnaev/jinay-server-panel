@@ -18,6 +18,7 @@ test("release verifies and bundles its pinned Node runtime", async () => {
     readFile(new URL("../deploy/serverpanel-web", import.meta.url), "utf8"),
   ]);
   assert.match(build, /node_version="\$\{SERVERPANEL_NODE_VERSION:-24\.18\.0\}"/);
+  assert.match(build, /-X main\.version=\$\{release_version\}/);
   assert.match(build, /SHASUMS256\.txt/);
   assert.match(build, /sha256sum --check --status node\.sha256/);
   assert.match(launcher, /runtime\/bin\/node/);

@@ -6,6 +6,7 @@ project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 output_dir="${project_root}/release"
 temporary_dir="$(mktemp -d)"
 node_version="${SERVERPANEL_NODE_VERSION:-24.18.0}"
+release_version="${SERVERPANEL_RELEASE_VERSION:-0.1.0-dev}"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 
 case "$(uname -m)" in
@@ -29,7 +30,8 @@ mkdir -p "${stage}/bin" "${stage}/web" "${stage}/deploy" "${stage}/runtime"
 (
   cd "${project_root}/agent"
   CGO_ENABLED=0 GOOS=linux GOARCH="${architecture}" \
-    go build -trimpath -ldflags='-s -w' -o "${stage}/bin/serverpanel-agent" ./cmd/serverpanel
+    go build -trimpath -ldflags="-s -w -X main.version=${release_version}" \
+    -o "${stage}/bin/serverpanel-agent" ./cmd/serverpanel
 )
 
 install -m 0755 deploy/serverpanel-web "${stage}/bin/serverpanel-web"

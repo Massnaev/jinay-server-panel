@@ -29,6 +29,8 @@ jobs:
           cache: false
 
       - name: Build and verify release archive
+        env:
+          SERVERPANEL_RELEASE_VERSION: ${{ github.ref_name }}
         run: scripts/build-release.sh
 
       - name: Publish GitHub release

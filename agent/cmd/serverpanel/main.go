@@ -17,7 +17,7 @@ import (
 	"github.com/Massnaev/serverpanel/agent/internal/config"
 )
 
-const version = "0.1.0-dev"
+var version = "0.1.0-dev"
 
 func main() {
 	cfg := config.FromEnv()
