@@ -51,7 +51,9 @@ The intended release flow is:
 curl -fsSL https://raw.githubusercontent.com/OWNER/serverpanel/main/install.sh | sudo bash
 ```
 
-`OWNER` remains a placeholder until the GitHub repository is created. The installer will verify a signed release checksum, bind the agent to loopback, create the first administrator, and print a one-time password. Do not use an unsigned installer copied from an issue or chat message.
+`OWNER` remains a placeholder until the GitHub repository is created. The installer verifies the published SHA-256 release checksum, binds the agent to loopback, creates the first administrator, and prints a one-time password. Do not use an installer copied from an issue or chat message.
+
+Until the repository and its first release exist, the installer deliberately stops at the `OWNER` placeholder. Release archives are produced on Ubuntu with `scripts/build-release.sh`; the generated archive contains the tested web build and Linux agent.
 
 ## Secrets
 

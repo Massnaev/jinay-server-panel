@@ -4,10 +4,10 @@
 
 - [x] Repository, product architecture and security boundary
 - [x] Dashboard design system and realistic preview data
-- [ ] Local agent with loopback-only HTTP API
-- [ ] CLI administrator creation and one-time initial credential
-- [ ] Session cookies, CSRF protection, login rate limiting and audit log
-- [ ] Ubuntu 24.04 systemd unit and reverse-proxy guide
+- [x] Local agent with loopback-only HTTP API
+- [x] CLI administrator creation and one-time initial credential
+- [x] Session cookies, CSRF protection, login rate limiting and audit log
+- [x] Ubuntu 24.04 systemd unit and reverse-proxy example
 - [ ] Signed release checksums and idempotent installer
 
 ## Phase 1 — useful server operations
