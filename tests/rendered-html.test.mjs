@@ -13,13 +13,13 @@ async function render() {
   );
 }
 
-test("server-renders the protected ServerPanel shell", async () => {
+test("server-renders the protected Jinay shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
   assert.match(html, /<html lang="ru"/i);
-  assert.match(html, /<title>ServerPanel/);
+  assert.match(html, /<title>Jinay/);
   assert.match(html, /Проверяем защищённую сессию/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
@@ -39,6 +39,9 @@ test("keeps the MVP security and accessibility boundaries visible in source", as
   assert.match(page, /Питание и охлаждение/);
   assert.match(page, /SWAP/);
   assert.match(page, /controlDisabledReason/);
+  assert.match(page, /Физическая топология/);
+  assert.match(page, /Видеокарты/);
+  assert.match(page, /Диагностика ничего не меняет/);
   assert.doesNotMatch(page, /\/api\/power|\/api\/fans/);
   assert.match(page, /process\.env\.NODE_ENV === "development"/);
   assert.doesNotMatch(exportedHtml, /\.vinext\/fonts|[A-Z]:\\/i);
@@ -46,6 +49,6 @@ test("keeps the MVP security and accessibility boundaries visible in source", as
   assert.doesNotMatch(page, /exec\(|spawn\(|\/bin\/sh|sudo /);
   assert.match(css, /focus-visible/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.match(layout, /title: "ServerPanel/);
+  assert.match(layout, /title: "Jinay/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });

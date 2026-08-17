@@ -6,7 +6,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin", "cyr
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  title: "ServerPanel — Ubuntu control plane",
+  title: "Jinay — Server Panel",
   description: "Безопасный self-hosted мониторинг и управление Ubuntu-сервером.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
 };

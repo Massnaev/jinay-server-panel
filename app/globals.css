@@ -183,8 +183,27 @@ tbody tr:hover { background: #111823; }
 .summary-strip > div { display: flex; align-items: baseline; gap: 9px; padding: 18px; border-right: 1px solid var(--border); color: var(--text-muted); font-size: 11px; }
 .summary-strip > div:last-child { border-right: 0; }
 .summary-strip.four { grid-template-columns: repeat(4, 1fr); }
+.explanation-card { display: grid; grid-template-columns: auto 1fr; gap: 14px; padding: 16px 18px; border: 1px solid #28466f; border-radius: var(--radius); background: linear-gradient(120deg, #101d31, #0d141f); }
+.explanation-code { align-self: start; padding: 5px 7px; border: 1px solid #3f6394; border-radius: 6px; color: #9bc1ff; font: 700 9px var(--font-geist-mono), monospace; letter-spacing: .08em; }
+.explanation-card strong { font-size: 12px; }
+.explanation-card p { margin: 4px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
+.hardware-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.device-grid { display: grid; gap: 10px; margin-top: 18px; }
+.device-card { padding: 14px; border: 1px solid #253145; border-radius: 10px; background: #0b111a; }
+.device-card strong { display: block; margin-top: 6px; color: var(--text); font-size: 12px; }
+.device-card p { margin: 5px 0 0; color: var(--text-muted); font: 10px var(--font-geist-mono), monospace; }
+.device-index { color: #8eb7ff; font: 700 9px var(--font-geist-mono), monospace; letter-spacing: .08em; text-transform: uppercase; }
 .summary-number { color: var(--text); font: 650 27px var(--font-geist-mono), monospace; }
 .power-panel { gap: 18px; }
+.power-glossary { display: grid; gap: 7px; padding: 13px; border: 1px solid var(--border); border-radius: 9px; background: #0a0f17; }
+.power-glossary p { margin: 0; color: var(--text-muted); font-size: 10px; }
+.power-glossary strong { color: var(--text-secondary); }
+.diagnostics-guide { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; }
+.diagnostics-guide > div:first-child > p:not(.eyebrow) { max-width: 75ch; margin: 7px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
+.diagnostics-guide > small { grid-column: 1 / -1; color: var(--text-muted); font-size: 10px; }
+.diagnostic-flow { display: flex; align-items: center; gap: 7px; }
+.diagnostic-flow span { padding: 7px 9px; border: 1px solid #33435d; border-radius: 7px; color: var(--text-secondary); font-size: 9px; }
+.diagnostic-flow i { color: var(--primary); font-style: normal; }
 .panel-description { margin: 5px 0 0; color: var(--text-muted); font-size: 11px; }
 .telemetry-list { display: grid; margin-top: 18px; border-top: 1px solid var(--border); }
 .telemetry-row { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 0; border-bottom: 1px solid #1d2531; color: var(--text-secondary); font-size: 11px; }
@@ -240,6 +259,7 @@ tbody tr:hover { background: #111823; }
   .server-facts { width: 100%; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid, .dashboard-grid.lower-grid { grid-template-columns: 1fr; }
+  .hardware-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -262,6 +282,8 @@ tbody tr:hover { background: #111823; }
   .metric-card { padding: 15px; }
   .metric-value { font-size: 26px; }
   .finding-grid { grid-template-columns: 1fr; }
+  .diagnostics-guide { grid-template-columns: 1fr; }
+  .diagnostics-guide > small { grid-column: auto; }
   .summary-strip { grid-template-columns: 1fr; }
   .summary-strip.four { grid-template-columns: 1fr 1fr; }
   .summary-strip > div { border-right: 0; border-bottom: 1px solid var(--border); }

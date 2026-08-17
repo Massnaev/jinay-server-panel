@@ -45,6 +45,8 @@ type Metrics = {
     cpuCores: number;
     cpuThreads: number;
     cpuMaxFrequencyMHz: number;
+    processors: Array<{ socketId: string; model: string; physicalCores: number; logicalThreads: number }>;
+    gpus: Array<{ card: string; model: string; vendor: string; vendorId: string; deviceId: string; pciSlot: string; driver: string; temperatureCelsius?: number }>;
   };
   cpuPercent: number;
   load: [number, number, number];
@@ -87,6 +89,11 @@ const demoMetrics: Metrics = {
     cpuCores: 16,
     cpuThreads: 32,
     cpuMaxFrequencyMHz: 3600,
+    processors: [
+      { socketId: "0", model: "Intel Xeon E5-2689 0 @ 2.60GHz", physicalCores: 8, logicalThreads: 16 },
+      { socketId: "1", model: "Intel Xeon E5-2689 0 @ 2.60GHz", physicalCores: 8, logicalThreads: 16 },
+    ],
+    gpus: [{ card: "card0", model: "G92 [GeForce GTS 250]", vendor: "NVIDIA", vendorId: "10de", deviceId: "0615", pciSlot: "0000:03:00.0", driver: "nouveau", temperatureCelsius: 49 }],
   },
   cpuPercent: 34,
   load: [5.18, 4.72, 4.31],
@@ -150,6 +157,7 @@ export default function Home() {
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(demoAudit);
   const [history, setHistory] = useState(initialHistory);
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [agentVersion, setAgentVersion] = useState("demo");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [pendingAction, setPendingAction] = useState<{ container: Container; action: ContainerAction } | null>(null);
@@ -170,8 +178,9 @@ export default function Home() {
       return;
     }
     if (metricResponse.ok) {
-      const data = (await metricResponse.json()) as { metrics: Metrics };
+      const data = (await metricResponse.json()) as { metrics: Metrics; agentVersion: string };
       setMetrics(data.metrics);
+      setAgentVersion(data.agentVersion || "неизвестно");
       setHistory((current) => [...current.slice(-23), Math.round(data.metrics.cpuPercent)]);
     }
     if (containerResponse.ok) {
@@ -306,7 +315,7 @@ export default function Home() {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Перейти к содержимому</a>
       <aside className="sidebar" aria-label="Основная навигация">
-        <div className="brand"><span className="brand-mark">SP</span><span>ServerPanel<small>Control plane · 0.1</small></span></div>
+        <div className="brand"><span className="brand-mark">J</span><span>Jinay<small>Server Panel · {agentVersion}</small></span></div>
         <nav className="nav-list">
           <NavButton active={tab === "overview"} icon="overview" label="Обзор" badge="live" onClick={() => setTab("overview")} />
           <NavButton active={tab === "hardware"} icon="hardware" label="Питание" badge={String(metrics.temperatures.length)} onClick={() => setTab("hardware")} />
@@ -322,7 +331,7 @@ export default function Home() {
 
       <main id="main-content" className="main-content">
         <header className="topbar">
-          <div className="topbar-copy"><p className="eyebrow">ServerPanel / {metrics.hostname}</p><h1>{tabTitle(tab)}</h1><p className="page-description">{tabDescription(tab)}</p></div>
+          <div className="topbar-copy"><p className="eyebrow">Jinay / {metrics.hostname}</p><h1>{tabTitle(tab)}</h1><p className="page-description">{tabDescription(tab)}</p></div>
           <div className="topbar-actions">
             <div className="connection-state"><span className="status-dot" />Сервер на связи</div>
             <button className="button secondary" type="button" disabled={busy} onClick={() => void loadDashboard()}>{busy ? "Обновление…" : "Обновить"}</button>
@@ -350,8 +359,8 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
   return <div className="page-stack">
     <section className="server-hero" aria-label="Краткое состояние сервера">
       <div className="server-identity">
-        <div className="server-orbit" aria-hidden="true"><span>SP</span></div>
-        <div><p className="eyebrow">Основной узел</p><h2>{metrics.hostname}</h2><p>{metrics.system.osName || "Linux"} · {metrics.system.cpuModel || "локальный агент"}</p></div>
+        <div className="server-orbit" aria-hidden="true"><span>J</span></div>
+        <div><p className="eyebrow">Основной узел</p><h2>{metrics.hostname}</h2><p>{metrics.system.osName || "Linux"} · {metrics.system.cpuSockets > 1 ? `${metrics.system.cpuSockets} × ` : ""}{metrics.system.cpuModel || "локальный агент"}</p></div>
       </div>
       <dl className="server-facts">
         <div><dt>Состояние</dt><dd className="online-value"><span className="status-dot" />В сети</dd></div>
@@ -364,10 +373,12 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
     <section className="metric-grid" aria-label="Текущие показатели">
       <MetricCard code="CPU" label="Процессоры" value={`${metrics.cpuPercent.toFixed(0)}%`} detail={`${metrics.system.cpuSockets || 1} сок. · ${metrics.system.cpuCores || metrics.cpuCount} ядер · ${metrics.system.cpuThreads || metrics.cpuCount} потоков`} progress={metrics.cpuPercent} tone="blue" />
       <MetricCard code="RAM" label="Оперативная память" value={`${usage.memory.toFixed(0)}%`} detail={`${formatBytes(metrics.memoryUsedBytes)} из ${formatBytes(metrics.memoryTotalBytes)}`} progress={usage.memory} tone="violet" />
-      <MetricCard code="SWAP" label="Подкачка" value={metrics.swapTotalBytes ? `${usage.swap.toFixed(0)}%` : "Отключена"} detail={metrics.swapTotalBytes ? `${formatBytes(metrics.swapUsedBytes)} из ${formatBytes(metrics.swapTotalBytes)}` : "Swap-раздел не настроен"} progress={usage.swap} tone="blue" />
+      <MetricCard code="SWAP" label="Swap — резерв памяти" value={metrics.swapTotalBytes ? `${usage.swap.toFixed(0)}%` : "Отключён"} detail={metrics.swapTotalBytes ? `${formatBytes(metrics.swapUsedBytes)} из ${formatBytes(metrics.swapTotalBytes)}` : "Резерв на диске не настроен"} progress={usage.swap} tone="blue" />
       <MetricCard code="NVME" label="Хранилище" value={`${usage.disk.toFixed(0)}%`} detail={`${formatBytes(metrics.diskUsedBytes)} из ${formatBytes(metrics.diskTotalBytes)}`} progress={usage.disk} tone="amber" />
       <MetricCard code="TEMP" label="Макс. температура" value={usage.maxTemperature ? `${usage.maxTemperature.toFixed(0)}°C` : "Нет данных"} detail={metrics.temperatures.length ? `${metrics.temperatures.length} активных датчика` : "Датчики не обнаружены"} progress={usage.maxTemperature} tone="green" />
     </section>
+
+    <aside className="explanation-card"><span className="explanation-code">SWAP</span><div><strong>Это страховочный резерв, а не дополнительная RAM.</strong><p>Linux временно переносит редко используемые страницы памяти на диск, чтобы избежать аварийной остановки процессов. Небольшое использование нормально; постоянный рост выше 70% означает нехватку RAM или слишком большую рабочую нагрузку.</p></div></aside>
 
     <section className="dashboard-grid">
       <article className="panel chart-panel">
@@ -411,12 +422,29 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
 
 function Hardware({ metrics }: { metrics: Metrics }) {
   const maximumTemperature = Math.max(0, ...metrics.temperatures.map((sensor) => sensor.celsius));
+  const processors = metrics.system.processors ?? [];
+  const gpus = metrics.system.gpus ?? [];
   return <div className="page-stack">
     <section className="summary-strip four" aria-label="Сводка питания и охлаждения">
       <div><span className="summary-number">{metrics.power.governor || "—"}</span><span>CPU governor</span></div>
       <div><span className="summary-number">{formatFrequency(metrics.power.currentFrequencyMHz)}</span><span>средняя частота</span></div>
       <div><span className="summary-number">{maximumTemperature ? `${maximumTemperature.toFixed(0)}°C` : "—"}</span><span>макс. температура</span></div>
       <div><span className="summary-number">{metrics.fans.length || "—"}</span><span>датчиков RPM</span></div>
+    </section>
+
+    <section className="hardware-grid">
+      <article className="panel">
+        <div className="panel-header"><div><p className="eyebrow">Физическая топология</p><h2>Процессоры</h2><p className="panel-description">Каждый сокет показан отдельно — это не число потоков и не одна повторённая модель.</p></div><span className="count-pill">{processors.length || metrics.system.cpuSockets}</span></div>
+        <div className="device-grid">
+          {processors.length ? processors.map((processor, index) => <div className="device-card" key={processor.socketId}><span className="device-index">CPU {index + 1}</span><strong>{processor.model || metrics.system.cpuModel}</strong><p>Сокет {processor.socketId} · {processor.physicalCores} ядер · {processor.logicalThreads} потоков</p></div>) : <p className="empty-telemetry">Ядро сообщило общую топологию, но не предоставило идентификаторы физических сокетов.</p>}
+        </div>
+      </article>
+      <article className="panel">
+        <div className="panel-header"><div><p className="eyebrow">DRM / PCI</p><h2>Видеокарты</h2><p className="panel-description">Определение выполняется только чтением системных идентификаторов Linux.</p></div><span className="count-pill">{gpus.length}</span></div>
+        <div className="device-grid">
+          {gpus.length ? gpus.map((gpu) => <div className="device-card" key={`${gpu.card}-${gpu.pciSlot}`}><span className="device-index">{gpu.vendor} · {gpu.card}</span><strong>{gpu.model}</strong><p>{gpu.pciSlot || "PCI-адрес неизвестен"} · драйвер {gpu.driver || "не загружен"}{gpu.temperatureCelsius ? ` · ${gpu.temperatureCelsius.toFixed(1)}°C` : ""}</p></div>) : <p className="empty-telemetry">Linux DRM не обнаружил видеокарту. Это нормально для headless-сервера или устройства без загруженного драйвера.</p>}
+        </div>
+      </article>
     </section>
 
     <section className="dashboard-grid lower-grid">
@@ -431,6 +459,7 @@ function Hardware({ metrics }: { metrics: Metrics }) {
         </dl>
         <div className="segmented disabled" aria-label="Переключение профилей пока заблокировано"><span>Эко</span><span className="selected">Баланс</span><span>Турбо</span></div>
         <small>{metrics.power.controlDisabledReason || "Переключение будет доступно после аппаратной проверки и настройки отката."}</small>
+        <div className="power-glossary"><p><strong>Governor</strong> задаёт, как Linux выбирает частоту CPU.</p><p><strong>Текущая частота</strong> — среднее по доступным ядрам, а не показатель одного процессора.</p><p><strong>ACPI-профиль</strong> — режим всей платформы, только если его предоставляет BIOS/BMC.</p></div>
       </article>
 
       <article className="panel">
@@ -460,7 +489,7 @@ function Containers({ containers, onAction }: { containers: Container[]; onActio
 }
 
 function Diagnostics({ findings }: { findings: Finding[] }) {
-  return <div className="page-stack"><section className="summary-strip"><div><span className="summary-number">{findings.filter((f) => f.severity === "critical").length}</span><span>критических</span></div><div><span className="summary-number">{findings.filter((f) => f.severity === "warning").length}</span><span>предупреждений</span></div><div><span className="summary-number">{findings.filter((f) => f.severity === "ok").length}</span><span>в норме</span></div></section><section className="finding-grid">{findings.map((finding) => <article className={`finding-card ${finding.severity}`} key={finding.id}><div className="finding-card-top"><span className={`severity-label ${finding.severity}`}>{severityLabel(finding.severity)}</span><time>{new Date(finding.detectedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time></div><h2>{finding.title}</h2><p>{finding.detail}</p><div className="recommendation"><strong>Что делать</strong><p>{finding.recommendation}</p></div></article>)}</section></div>;
+  return <div className="page-stack"><section className="summary-strip"><div><span className="summary-number">{findings.filter((f) => f.severity === "critical").length}</span><span>критических</span></div><div><span className="summary-number">{findings.filter((f) => f.severity === "warning").length}</span><span>предупреждений</span></div><div><span className="summary-number">{findings.filter((f) => f.severity === "ok").length}</span><span>в норме</span></div></section><section className="panel diagnostics-guide"><div><p className="eyebrow">Как это работает</p><h2>Диагностика ничего не меняет на сервере</h2><p>Агент раз в несколько секунд читает метрики и сравнивает их с понятными порогами. CPU и RAM: предупреждение от 90%, swap — от 70%, диск — от 85%, температура — от 85°C. Отдельно проверяется доступность Docker.</p></div><div className="diagnostic-flow"><span>Собрать</span><i>→</i><span>Сравнить</span><i>→</i><span>Объяснить</span></div><small>Рекомендация — подсказка оператору. Jinay не применяет её автоматически и не запускает произвольные команды.</small></section><section className="finding-grid">{findings.map((finding) => <article className={`finding-card ${finding.severity}`} key={finding.id}><div className="finding-card-top"><span className={`severity-label ${finding.severity}`}>{severityLabel(finding.severity)}</span><time>{new Date(finding.detectedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time></div><h2>{finding.title}</h2><p>{finding.detail}</p><div className="recommendation"><strong>Что делать</strong><p>{finding.recommendation}</p></div></article>)}</section></div>;
 }
 
 function Audit({ entries }: { entries: AuditEntry[] }) {
@@ -494,10 +523,10 @@ function ConfirmDialog({ pending, busy, onCancel, onConfirm }: { pending: { cont
 }
 
 function LoginScreen({ busy, onSubmit, demoMode }: { busy: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; demoMode: boolean }) {
-  return <main className="login-page"><section className="login-intro"><div className="brand large"><span className="brand-mark">SP</span><span>ServerPanel<small>Ubuntu control plane</small></span></div><div><p className="eyebrow">Сервер под контролем</p><h1>Главное состояние — без терминального шума.</h1><p>Метрики, Docker и диагностика в одной защищённой панели. Привилегированные действия ограничены и записываются в журнал.</p></div><div className="login-trust"><span>Loopback agent</span><span>CSRF protection</span><span>No shell endpoint</span></div></section><section className="login-form-wrap"><form className="login-form" onSubmit={onSubmit}><div><p className="eyebrow">Авторизация</p><h2>Войти в ServerPanel</h2><p>Используйте аккаунт, созданный командой на Ubuntu.</p></div>{demoMode && <div className="form-note">Локальный демо-режим: введите любые непустые значения.</div>}<label htmlFor="username">Логин</label><input id="username" name="username" autoComplete="username" required defaultValue={demoMode ? "admin" : ""} /><label htmlFor="password">Пароль</label><input id="password" name="password" type="password" autoComplete="current-password" required defaultValue={demoMode ? "demo-password" : ""} /><button className="button primary full" type="submit" disabled={busy}>{busy ? "Проверка…" : "Войти"}</button><small>После 5 неудачных попыток вход временно блокируется.</small></form></section></main>;
+  return <main className="login-page"><section className="login-intro"><div className="brand large"><span className="brand-mark">J</span><span>Jinay<small>Server Panel</small></span></div><div><p className="eyebrow">Сервер под контролем</p><h1>Главное состояние — без терминального шума.</h1><p>Метрики, Docker и диагностика в одной защищённой панели. Привилегированные действия ограничены и записываются в журнал.</p></div><div className="login-trust"><span>Loopback agent</span><span>CSRF protection</span><span>No shell endpoint</span></div></section><section className="login-form-wrap"><form className="login-form" onSubmit={onSubmit}><div><p className="eyebrow">Авторизация</p><h2>Войти в Jinay</h2><p>Используйте аккаунт, созданный командой на Ubuntu.</p></div>{demoMode && <div className="form-note">Локальный демо-режим: введите любые непустые значения.</div>}<label htmlFor="username">Логин</label><input id="username" name="username" autoComplete="username" required defaultValue={demoMode ? "admin" : ""} /><label htmlFor="password">Пароль</label><input id="password" name="password" type="password" autoComplete="current-password" required defaultValue={demoMode ? "demo-password" : ""} /><button className="button primary full" type="submit" disabled={busy}>{busy ? "Проверка…" : "Войти"}</button><small>После 5 неудачных попыток вход временно блокируется.</small></form></section></main>;
 }
 
-function LoadingScreen() { return <main className="loading-screen"><div className="brand-mark pulse">SP</div><p>Проверяем защищённую сессию…</p></main>; }
+function LoadingScreen() { return <main className="loading-screen"><div className="brand-mark pulse">J</div><p>Проверяем защищённую сессию…</p></main>; }
 
 function ratio(used: number, total: number) { return total > 0 ? used / total * 100 : 0; }
 function formatBytes(bytes: number) { if (!bytes) return "0 Б"; const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"]; const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return `${(bytes / 1024 ** power).toLocaleString("ru-RU", { maximumFractionDigits: power > 2 ? 1 : 0 })} ${units[power]}`; }
