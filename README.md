@@ -1,98 +1,73 @@
-# vinext-starter
+# ServerPanel
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Open-source, self-hosted control panel for Ubuntu 24.04 servers. ServerPanel is being built for operators who want clear health monitoring and carefully constrained server controls without living in a terminal.
 
-## Prerequisites
+> [!IMPORTANT]
+> This repository is an early MVP. Keep it behind a VPN or an authenticated reverse proxy until the security checklist is complete. Never expose the agent, Docker socket, or Codex App Server directly to the internet.
 
-- Node.js `>=22.13.0`
+## First milestone
 
-## Quick Start
+- Responsive dark operations dashboard
+- CPU, memory, disk, load and temperature telemetry
+- Local username/password authentication created from Ubuntu
+- Docker inventory with opt-in start, stop and restart actions
+- Health findings, audit history and recovery guidance
+- Power profiles shown as hardware-dependent capabilities
+- Codex integration boundary designed around localhost/Unix sockets and approvals
+- One-command Ubuntu installer (enabled after the first signed release)
+
+## Architecture
+
+```text
+Browser -> HTTPS reverse proxy -> ServerPanel web app
+                                  |
+                                  +-> local agent (loopback only)
+                                      +-> /proc and /sys telemetry
+                                      +-> allowlisted Docker actions
+                                      +-> audit log
+                                      +-> Codex App Server bridge (future)
+```
+
+The browser never receives host credentials and never talks to Docker or Codex directly. The local agent does not expose a general shell endpoint.
+
+Read [ARCHITECTURE.md](docs/ARCHITECTURE.md), [SECURITY.md](SECURITY.md), and [ROADMAP.md](ROADMAP.md) before deploying or contributing.
+
+## Development
+
+Requirements: Node.js 22+ and Go 1.22+.
 
 ```bash
-npm install
+npm ci
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+The current web preview uses realistic demo telemetry. The Ubuntu agent is developed in `agent/` and will replace demo data when connected.
 
-## Included Shape
+## Installation
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+The intended release flow is:
 
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+curl -fsSL https://raw.githubusercontent.com/OWNER/serverpanel/main/install.sh | sudo bash
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+`OWNER` remains a placeholder until the GitHub repository is created. The installer will verify a signed release checksum, bind the agent to loopback, create the first administrator, and print a one-time password. Do not use an unsigned installer copied from an issue or chat message.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Secrets
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- Commit `.env.example`, never `.env`.
+- Store runtime secrets in root-readable files or the OS credential store.
+- Never commit API keys, OAuth tokens, `~/.codex/auth.json`, private certificates, generated passwords, or production logs.
+- Treat Docker access and Codex credentials as root-equivalent capabilities.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Contributing
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+Each logical change should be committed separately. Security-sensitive changes need tests and an explanation of the capability they add or widen.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## Donations
 
-## Useful Commands
+Donation addresses will be added only after the project owner supplies and verifies them. No placeholder wallet is published.
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+## License
 
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+A license will be selected before the first public release.
