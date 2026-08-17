@@ -75,6 +75,8 @@ sudo systemctl start jinay-update.service
 
 The updater follows published GitHub Releases only. It does not install commits from `main` and does not create releases.
 
+Development versions such as `main-abcdef0` are never replaced automatically, which prevents an older stable release from overwriting a newer test snapshot. Install the next stable release manually once to return that server to the stable update channel.
+
 ## Manual update and rollback
 
 Run the trusted installer bundled with the currently installed release:

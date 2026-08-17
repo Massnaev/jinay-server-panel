@@ -20,7 +20,7 @@ Jinay is a privileged administration surface. A flaw can affect the entire host,
 
 The production host serves prebuilt static assets; Node.js, Vite and Vinext are build-time dependencies only. The Go agent retains `MemoryDenyWriteExecute=true`.
 
-The optional `jinay-update.timer` runs as root because installing a system release requires writing under `/opt` and restarting the agent. Its service has a fixed executable path and repository, accepts no browser input, and does not pipe a newly downloaded script into a shell. It is disabled unless the operator explicitly enables it. A compromised GitHub release remains a supply-chain risk until signed artifacts are implemented.
+The optional `jinay-update.timer` runs as root because installing a system release requires writing under `/opt` and restarting the agent. Its service has a fixed executable path and repository, accepts no browser input, and does not pipe a newly downloaded script into a shell. It is disabled unless the operator explicitly enables it, and it refuses to replace `main-*` or development snapshots automatically. A compromised GitHub release remains a supply-chain risk until signed artifacts are implemented.
 
 ## Deployment baseline
 

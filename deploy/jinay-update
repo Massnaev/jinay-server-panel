@@ -26,6 +26,11 @@ if [[ "${current_version}" == "${latest_version}" ]]; then
   printf 'Jinay %s is already current.\n' "${current_version}"
   exit 0
 fi
+if [[ "${current_version}" == main-* || "${current_version}" == *-dev ]]; then
+  printf 'Jinay %s is a development snapshot; automatic release replacement is skipped.\n' "${current_version}"
+  printf 'Install the next stable release manually once, then automatic updates can continue.\n'
+  exit 0
+fi
 
 printf 'Updating Jinay from %s to %s...\n' "${current_version}" "${latest_version}"
 SERVERPANEL_REPOSITORY="${repository}" \

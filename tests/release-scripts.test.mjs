@@ -42,6 +42,8 @@ test("release exports a static interface and keeps Node off the server", async (
   assert.match(updateTimer, /Persistent=true/);
   assert.match(updater, /current_version=.*agent.*version/);
   assert.match(updater, /SERVERPANEL_VERSION="\$\{latest_version\}"/);
+  assert.match(updater, /current_version.*== main-/);
+  assert.match(updater, /development snapshot/);
   assert.match(updater, /deploy\/install\.sh/);
   assert.doesNotMatch(updater, /curl.*\|.*bash/);
 });
