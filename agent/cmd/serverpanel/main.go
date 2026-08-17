@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Massnaev/serverpanel/agent/internal/api"
-	"github.com/Massnaev/serverpanel/agent/internal/audit"
-	"github.com/Massnaev/serverpanel/agent/internal/auth"
-	"github.com/Massnaev/serverpanel/agent/internal/config"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/api"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/audit"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/auth"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/config"
 )
 
 var version = "0.1.0-dev"

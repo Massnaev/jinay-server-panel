@@ -1,6 +1,6 @@
 # Tailscale access
 
-ServerPanel remains bound to `127.0.0.1:9080`. When Tailscale is installed, the installer attempts to configure private HTTPS access with Tailscale Serve and prints the resulting URL.
+Jinay remains bound to `127.0.0.1:9080`. When Tailscale is installed, the installer attempts to configure private HTTPS access with Tailscale Serve and prints the resulting URL.
 
 ## A second user cannot open the panel
 
@@ -11,7 +11,7 @@ Being connected to Tailscale is not sufficient by itself. The user must be autho
 
 The recipient must use the full address printed by the installer, for example `https://node01.example-tailnet.ts.net/`. Shared machines cannot be reached using only the short hostname. Tailnet access-control rules still apply to shared machines and Tailscale Serve.
 
-On the recipient's device, verify connectivity before debugging ServerPanel:
+On the recipient's device, verify connectivity before debugging Jinay:
 
 ```bash
 tailscale ping node01.example-tailnet.ts.net
@@ -27,6 +27,6 @@ Do not enable Tailscale Funnel for an administrative MVP panel. Funnel makes the
 For a deployment using Caddy, Nginx, or another private edge:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Massnaev/serverpanel/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/Massnaev/jinay-server-panel/main/install.sh \
   | sudo SERVERPANEL_TAILSCALE_SERVE=off bash
 ```

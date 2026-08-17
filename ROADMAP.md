@@ -1,4 +1,4 @@
-# ServerPanel roadmap
+# Jinay Server Panel roadmap
 
 ## Phase 0 — secure foundation (current)
 

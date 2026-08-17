@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Massnaev/serverpanel/agent/internal/audit"
-	"github.com/Massnaev/serverpanel/agent/internal/auth"
-	"github.com/Massnaev/serverpanel/agent/internal/config"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/audit"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/auth"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/config"
 )
 
 func testServer(t *testing.T) *Server {
@@ -45,7 +45,7 @@ func TestWebUIOnlyServesExportedPublicFiles(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(webRoot, "assets"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("<!doctype html><title>ServerPanel</title>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("<!doctype html><title>Jinay</title>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	users, err := auth.Open(filepath.Join(directory, "users.json"))
@@ -56,7 +56,7 @@ func TestWebUIOnlyServesExportedPublicFiles(t *testing.T) {
 
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
-	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("ServerPanel")) {
+	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("Jinay")) {
 		t.Fatalf("expected exported UI, got %d: %s", response.Code, response.Body.String())
 	}
 	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self'") {

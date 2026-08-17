@@ -1,6 +1,6 @@
-# ServerPanel
+# Jinay Server Panel
 
-Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS servers. ServerPanel is being built for operators who want clear health monitoring and carefully constrained server controls without living in a terminal.
+Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS servers. Jinay is built for operators who want clear health monitoring and carefully constrained server controls without living in a terminal.
 
 > [!IMPORTANT]
 > This repository is an early MVP. Keep it behind a VPN or an authenticated reverse proxy until the security checklist is complete. Never expose the agent, Docker socket, or Codex App Server directly to the internet.
@@ -9,12 +9,14 @@ Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS ser
 
 - Responsive dark operations dashboard
 - CPU, memory, disk, load and temperature telemetry
+- Physical CPU socket topology and automatic DRM/PCI GPU detection
 - Local username/password authentication created from Ubuntu
 - Docker inventory with opt-in start, stop and restart actions
 - Health findings, audit history and recovery guidance
 - Power profiles shown as hardware-dependent capabilities
 - Codex integration boundary designed around localhost/Unix sockets and approvals
 - One-command Ubuntu installer with verified release checksums
+- Optional daily updates from verified GitHub Releases
 
 ## Architecture
 
@@ -29,7 +31,7 @@ Browser -> Tailscale HTTPS / reverse proxy -> local agent (loopback only)
 
 The browser never receives host credentials and never talks to Docker or Codex directly. The local agent does not expose a general shell endpoint.
 
-Read [ARCHITECTURE.md](docs/ARCHITECTURE.md), [SECURITY.md](SECURITY.md), and [ROADMAP.md](ROADMAP.md) before deploying or contributing.
+Read [ARCHITECTURE.md](docs/ARCHITECTURE.md), [SECURITY.md](SECURITY.md), [ROADMAP.md](ROADMAP.md), and the [command reference](docs/COMMANDS.md) before deploying or contributing.
 
 ## Development
 
@@ -61,7 +63,7 @@ The current web preview uses realistic demo telemetry. The Ubuntu agent is devel
 The intended release flow is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Massnaev/serverpanel/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Massnaev/jinay-server-panel/main/install.sh | sudo bash
 ```
 
 The installer verifies the published SHA-256 release checksum, binds the agent to loopback, creates the first administrator, and prints the login, one-time password, and detected panel URL in the same terminal. Do not use an installer copied from an issue or chat message. Release archives are produced on Ubuntu with `scripts/build-release.sh`; each archive contains the tested Linux agent and prebuilt static interface. Node.js is not installed or run on the managed server.
@@ -89,7 +91,7 @@ Each logical change should be committed separately. Security-sensitive changes n
 
 ## Donations
 
-If ServerPanel is useful to you, you can support its development:
+If Jinay is useful to you, you can support its development:
 
 - **USDT (TRC-20):** `TUz11JVX41hTXBUWbbRazmBRWhxBGkytqT`
 

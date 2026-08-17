@@ -1,6 +1,6 @@
 # Security policy
 
-ServerPanel is a privileged administration surface. A flaw can affect the entire host, every container, and any credentials stored on that host.
+Jinay is a privileged administration surface. A flaw can affect the entire host, every container, and any credentials stored on that host.
 
 ## Security invariants
 

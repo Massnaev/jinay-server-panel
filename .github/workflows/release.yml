@@ -42,4 +42,4 @@ jobs:
           release/serverpanel-linux-amd64.tar.gz.sha256
           --verify-tag
           --generate-notes
-          --title "ServerPanel ${GITHUB_REF_NAME}"
+          --title "Jinay ${GITHUB_REF_NAME}"

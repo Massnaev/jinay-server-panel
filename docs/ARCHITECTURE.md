@@ -24,7 +24,7 @@ This is a privileged host boundary. The updater has no HTTP route and receives n
 
 ### Codex bridge (future)
 
-Codex runs under a dedicated Linux account and communicates through its App Server over a Unix socket or authenticated loopback. ServerPanel translates a small, typed set of UI intents into App Server calls. The browser cannot choose arbitrary tool permissions or bypass approval policy.
+Codex runs under a dedicated Linux account and communicates through its App Server over a Unix socket or authenticated loopback. Jinay translates a small, typed set of UI intents into App Server calls. The browser cannot choose arbitrary tool permissions or bypass approval policy.
 
 OpenAI authentication is owned by Codex using `codex login` or device-code login on the server. The credential store remains readable only by the Codex service account. Panel authentication remains separate.
 
