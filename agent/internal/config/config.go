@@ -1,0 +1,45 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+)
+
+type Config struct {
+	Listen              string
+	DataDir             string
+	SecureCookies       bool
+	EnableDockerActions bool
+	SessionTTL          time.Duration
+}
+
+func FromEnv() Config {
+	return Config{
+		Listen:              env("SERVERPANEL_LISTEN", "127.0.0.1:9080"),
+		DataDir:             env("SERVERPANEL_DATA_DIR", filepath.Join(".", "data")),
+		SecureCookies:       envBool("SERVERPANEL_SECURE_COOKIES", true),
+		EnableDockerActions: envBool("SERVERPANEL_ENABLE_DOCKER_ACTIONS", false),
+		SessionTTL:          12 * time.Hour,
+	}
+}
+
+func env(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
