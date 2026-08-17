@@ -252,12 +252,12 @@ export default function Home() {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Перейти к содержимому</a>
       <aside className="sidebar" aria-label="Основная навигация">
-        <div className="brand"><span className="brand-mark">SP</span><span>ServerPanel<small>MVP · 0.1</small></span></div>
+        <div className="brand"><span className="brand-mark">SP</span><span>ServerPanel<small>Control plane · 0.1</small></span></div>
         <nav className="nav-list">
-          <NavButton active={tab === "overview"} label="Обзор" badge="live" onClick={() => setTab("overview")} />
-          <NavButton active={tab === "containers"} label="Контейнеры" badge={String(containers.length)} onClick={() => setTab("containers")} />
-          <NavButton active={tab === "diagnostics"} label="Диагностика" badge={String(findings.filter((item) => item.severity !== "ok").length)} onClick={() => setTab("diagnostics")} />
-          <NavButton active={tab === "audit"} label="Журнал" onClick={() => setTab("audit")} />
+          <NavButton active={tab === "overview"} icon="overview" label="Обзор" badge="live" onClick={() => setTab("overview")} />
+          <NavButton active={tab === "containers"} icon="containers" label="Контейнеры" badge={String(containers.length)} onClick={() => setTab("containers")} />
+          <NavButton active={tab === "diagnostics"} icon="diagnostics" label="Диагностика" badge={String(findings.filter((item) => item.severity !== "ok").length)} onClick={() => setTab("diagnostics")} />
+          <NavButton active={tab === "audit"} icon="audit" label="Журнал" onClick={() => setTab("audit")} />
         </nav>
         <div className="sidebar-footer">
           <div className="future-card"><span>Следующий этап</span><strong>Codex и профили питания</strong><p>После проверки MVP и сервера по SSH.</p></div>
@@ -267,7 +267,7 @@ export default function Home() {
 
       <main id="main-content" className="main-content">
         <header className="topbar">
-          <div><p className="eyebrow">{metrics.hostname}</p><h1>{tabTitle(tab)}</h1></div>
+          <div className="topbar-copy"><p className="eyebrow">ServerPanel / {metrics.hostname}</p><h1>{tabTitle(tab)}</h1><p className="page-description">{tabDescription(tab)}</p></div>
           <div className="topbar-actions">
             <div className="connection-state"><span className="status-dot" />Сервер на связи</div>
             <button className="button secondary" type="button" disabled={busy} onClick={() => void loadDashboard()}>{busy ? "Обновление…" : "Обновить"}</button>
@@ -292,11 +292,24 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
   const critical = findings.filter((item) => item.severity === "critical").length;
   const running = containers.filter((item) => item.state === "running").length;
   return <div className="page-stack">
+    <section className="server-hero" aria-label="Краткое состояние сервера">
+      <div className="server-identity">
+        <div className="server-orbit" aria-hidden="true"><span>SP</span></div>
+        <div><p className="eyebrow">Основной узел</p><h2>{metrics.hostname}</h2><p>Ubuntu 24.04 LTS · локальный агент · защищённые операции</p></div>
+      </div>
+      <dl className="server-facts">
+        <div><dt>Состояние</dt><dd className="online-value"><span className="status-dot" />В сети</dd></div>
+        <div><dt>Uptime</dt><dd>{formatUptime(metrics.uptimeSeconds)}</dd></div>
+        <div><dt>Docker</dt><dd>{running}/{containers.length}</dd></div>
+        <div><dt>Load 1m</dt><dd>{metrics.load[0]?.toFixed(2) || "0.00"}</dd></div>
+      </dl>
+    </section>
+
     <section className="metric-grid" aria-label="Текущие показатели">
-      <MetricCard label="Процессоры" value={`${metrics.cpuPercent.toFixed(0)}%`} detail={`${metrics.cpuCount} потоков · load ${metrics.load[0]?.toFixed(2) || "0.00"}`} progress={metrics.cpuPercent} tone="blue" />
-      <MetricCard label="Оперативная память" value={`${usage.memory.toFixed(0)}%`} detail={`${formatBytes(metrics.memoryUsedBytes)} из ${formatBytes(metrics.memoryTotalBytes)}`} progress={usage.memory} tone="violet" />
-      <MetricCard label="Хранилище" value={`${usage.disk.toFixed(0)}%`} detail={`${formatBytes(metrics.diskUsedBytes)} из ${formatBytes(metrics.diskTotalBytes)}`} progress={usage.disk} tone="amber" />
-      <MetricCard label="Макс. температура" value={usage.maxTemperature ? `${usage.maxTemperature.toFixed(0)}°C` : "Нет данных"} detail={metrics.temperatures.length ? `${metrics.temperatures.length} активных датчика` : "Датчики не обнаружены"} progress={usage.maxTemperature} tone="green" />
+      <MetricCard code="CPU" label="Процессоры" value={`${metrics.cpuPercent.toFixed(0)}%`} detail={`${metrics.cpuCount} потоков · load ${metrics.load[0]?.toFixed(2) || "0.00"}`} progress={metrics.cpuPercent} tone="blue" />
+      <MetricCard code="RAM" label="Оперативная память" value={`${usage.memory.toFixed(0)}%`} detail={`${formatBytes(metrics.memoryUsedBytes)} из ${formatBytes(metrics.memoryTotalBytes)}`} progress={usage.memory} tone="violet" />
+      <MetricCard code="NVME" label="Хранилище" value={`${usage.disk.toFixed(0)}%`} detail={`${formatBytes(metrics.diskUsedBytes)} из ${formatBytes(metrics.diskTotalBytes)}`} progress={usage.disk} tone="amber" />
+      <MetricCard code="TEMP" label="Макс. температура" value={usage.maxTemperature ? `${usage.maxTemperature.toFixed(0)}°C` : "Нет данных"} detail={metrics.temperatures.length ? `${metrics.temperatures.length} активных датчика` : "Датчики не обнаружены"} progress={usage.maxTemperature} tone="green" />
     </section>
 
     <section className="dashboard-grid">
@@ -351,12 +364,24 @@ function Audit({ entries }: { entries: AuditEntry[] }) {
   return <section className="panel table-panel"><div className="panel-header table-heading"><div><p className="eyebrow">Последние 100 событий</p><h2>Журнал действий</h2><p>Входы и привилегированные операции фиксируются агентом.</p></div><button className="button secondary" type="button" disabled>Экспорт — далее</button></div><div className="table-wrap"><table><thead><tr><th>Время</th><th>Пользователь</th><th>Событие</th><th>Цель</th><th>Результат</th><th>IP</th></tr></thead><tbody>{entries.map((entry, index) => <tr key={`${entry.timestamp}-${index}`}><td>{new Date(entry.timestamp).toLocaleString("ru-RU")}</td><td><strong>{entry.actor}</strong></td><td><code>{entry.action}</code></td><td>{entry.target || "—"}</td><td><span className={`result-pill ${entry.result}`}>{entry.result === "allowed" ? "разрешено" : "отклонено"}</span></td><td><code>{entry.remoteIp || "—"}</code></td></tr>)}</tbody></table></div></section>;
 }
 
-function MetricCard({ label, value, detail, progress, tone }: { label: string; value: string; detail: string; progress: number; tone: string }) {
-  return <article className={`metric-card ${tone}`}><div className="metric-label"><span>{label}</span><i /></div><strong className="metric-value">{value}</strong><p>{detail}</p><div className="progress-track"><span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div></article>;
+function MetricCard({ code, label, value, detail, progress, tone }: { code: string; label: string; value: string; detail: string; progress: number; tone: string }) {
+  return <article className={`metric-card ${tone}`}><div className="metric-label"><span><i />{label}</span><small>{code}</small></div><strong className="metric-value">{value}</strong><p>{detail}</p><div className="progress-track"><span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div></article>;
 }
 
-function NavButton({ active, label, badge, onClick }: { active: boolean; label: string; badge?: string; onClick: () => void }) {
-  return <button type="button" className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={onClick}><span>{label}</span>{badge && <small>{badge}</small>}</button>;
+type NavIconName = "overview" | "containers" | "diagnostics" | "audit";
+
+function NavButton({ active, icon, label, badge, onClick }: { active: boolean; icon: NavIconName; label: string; badge?: string; onClick: () => void }) {
+  return <button type="button" className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={onClick}><span className="nav-label"><NavIcon name={icon} />{label}</span>{badge && <small>{badge}</small>}</button>;
+}
+
+function NavIcon({ name }: { name: NavIconName }) {
+  const paths = {
+    overview: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+    containers: <><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z" /><path d="m4 12 8 4.5 8-4.5" /><path d="m4 16.5 8 4.5 8-4.5" /></>,
+    diagnostics: <><path d="M12 3 4.5 6v5.5c0 4.5 3 7.7 7.5 9.5 4.5-1.8 7.5-5 7.5-9.5V6L12 3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
+    audit: <><path d="M6 4h12" /><path d="M6 9h12" /><path d="M6 14h8" /><path d="M6 19h5" /><circle cx="18" cy="18" r="3" /></>,
+  };
+  return <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
 function ConfirmDialog({ pending, busy, onCancel, onConfirm }: { pending: { container: Container; action: ContainerAction }; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
@@ -374,6 +399,7 @@ function ratio(used: number, total: number) { return total > 0 ? used / total * 
 function formatBytes(bytes: number) { if (!bytes) return "0 Б"; const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"]; const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return `${(bytes / 1024 ** power).toLocaleString("ru-RU", { maximumFractionDigits: power > 2 ? 1 : 0 })} ${units[power]}`; }
 function formatUptime(seconds: number) { const days = Math.floor(seconds / 86400); const hours = Math.floor((seconds % 86400) / 3600); return `${days} д ${hours} ч`; }
 function tabTitle(tab: Tab) { return ({ overview: "Обзор сервера", containers: "Docker-контейнеры", diagnostics: "Диагностика", audit: "Журнал действий" })[tab]; }
+function tabDescription(tab: Tab) { return ({ overview: "Живое состояние, ресурсы и ключевые риски узла.", containers: "Контроль жизненного цикла разрешённых контейнеров.", diagnostics: "Проблемы, рекомендации и состояние защиты.", audit: "Проверяемая история входов и привилегированных операций." })[tab]; }
 function roleLabel(role: User["role"]) { return ({ admin: "Администратор", operator: "Оператор", viewer: "Наблюдатель" })[role]; }
 function severityLabel(severity: Finding["severity"]) { return ({ ok: "Норма", info: "Информация", warning: "Внимание", critical: "Критично" })[severity]; }
 function labelAction(action: ContainerAction) { return ({ start: "Запустить", stop: "Остановить", restart: "Перезапустить" })[action]; }
