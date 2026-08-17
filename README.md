@@ -66,6 +66,14 @@ curl -fsSL https://raw.githubusercontent.com/Massnaev/serverpanel/main/install.s
 
 The installer verifies the published SHA-256 release checksum, binds the agent to loopback, creates the first administrator, and prints a one-time password. Do not use an installer copied from an issue or chat message. Release archives are produced on Ubuntu with `scripts/build-release.sh`; each archive contains the tested Linux agent and prebuilt static interface. Node.js is not installed or run on the managed server.
 
+For private HTTPS access from devices in the same tailnet, enable Tailscale Serve after installation:
+
+```bash
+sudo tailscale serve --bg --yes http://127.0.0.1:9080
+```
+
+This does not enable Tailscale Funnel and does not publish the panel to the public internet. Keep the agent bound to loopback.
+
 ## Secrets
 
 - Commit `.env.example`, never `.env`.

@@ -8,7 +8,7 @@
 - [x] CLI administrator creation and one-time initial credential
 - [x] Session cookies, CSRF protection, login rate limiting and audit log
 - [x] Ubuntu 24.04/26.04 LTS systemd unit and static same-origin interface
-- [ ] Signed release checksums and idempotent installer
+- [x] Versioned release assets, SHA-256 verification and repeatable installer
 
 ## Phase 1 — useful server operations
 
