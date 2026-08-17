@@ -14,10 +14,11 @@ ServerPanel is a privileged administration surface. A flaw can affect the entire
 8. Codex App Server is never exposed directly to a shared or public network.
 9. Destructive operations require confirmation and recent reauthentication.
 10. Hardware controls are unavailable until the exact platform is detected and tested.
+11. The same-origin API gateway has a fixed loopback destination and an explicit method/path allowlist.
 
 ## Deployment baseline
 
-- Ubuntu 24.04 with current security updates
+- Ubuntu 24.04 or 26.04 LTS with current security updates
 - Firewall allowing only SSH and the HTTPS reverse proxy
 - Panel reachable through a VPN, mesh network, or IP allowlist during MVP
 - SSH keys only; disable password SSH login after recovery access is verified

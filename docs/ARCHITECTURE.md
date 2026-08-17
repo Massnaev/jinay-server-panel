@@ -10,9 +10,11 @@ The web application owns presentation, navigation and the browser session bounda
 
 The agent is the only component allowed to inspect host telemetry or request an operational action. It listens on loopback or a Unix socket, validates the session and CSRF token, checks the caller role, validates typed parameters, executes a fixed command, and appends an audit event.
 
-### Reverse proxy
+### Same-origin API gateway
 
-Caddy or Nginx terminates TLS, applies request limits, and proxies only the required paths. The agent port is not opened by the firewall.
+The web process exposes a same-origin `/api` gateway with a fixed loopback upstream. It forwards only the documented method/path combinations, a bounded request body, and the cookie, content-type, and CSRF headers. It cannot select a hostname or proxy an arbitrary path. The agent port is not opened by the firewall.
+
+An external Caddy, Nginx, or Tailscale HTTPS edge terminates TLS and forwards browser traffic only to the loopback web process.
 
 ### Codex bridge (future)
 
@@ -24,8 +26,8 @@ OpenAI authentication is owned by Codex using `codex login` or device-code login
 
 | Boundary | Untrusted side | Trusted side | Required control |
 | --- | --- | --- | --- |
-| Internet to proxy | Browser/network | TLS edge | TLS, rate limits, allowlist/VPN |
-| Proxy to app | Request headers/body | Web app | Header sanitation, size limits |
+| Internet to web | Browser/network | TLS edge | TLS, rate limits, allowlist/VPN |
+| Web to agent | Request headers/body | Loopback agent | Fixed upstream, route allowlist, header sanitation, 64 KiB limit |
 | Browser session to action | User input | Agent operation | Session, role, CSRF, reauth |
 | Agent to host | Typed action | OS/Docker | Allowlist, no shell, timeout |
 | Panel to Codex | Prompt/tool request | Codex workspace | Sandbox, approvals, budgets |

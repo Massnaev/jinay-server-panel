@@ -25,8 +25,9 @@ test("server-renders the protected ServerPanel shell", async () => {
 });
 
 test("keeps the MVP security and accessibility boundaries visible in source", async () => {
-  const [page, css, layout, packageJson] = await Promise.all([
+  const [page, proxy, css, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/agent-proxy.js", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -35,6 +36,10 @@ test("keeps the MVP security and accessibility boundaries visible in source", as
   assert.match(page, /credentials: "include"/);
   assert.match(page, /Подтверждение операции/);
   assert.match(page, /Режим предпросмотра/);
+  assert.match(page, /process\.env\.NODE_ENV === "development"/);
+  assert.match(proxy, /127\.0\.0\.1:9080/);
+  assert.match(proxy, /containerActionPattern/);
+  assert.doesNotMatch(proxy, /process\.env|new URL\(request\.url\).*hostname/);
   assert.doesNotMatch(page, /exec\(|spawn\(|\/bin\/sh|sudo /);
   assert.match(css, /focus-visible/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);

@@ -46,7 +46,7 @@ type Metrics = {
   network: { receivedBytes: number; transmittedBytes: number };
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_SERVERPANEL_API_BASE || "/api";
+const API_BASE = "/api";
 
 const demoMetrics: Metrics = {
   hostname: "ubuntu-xeon-01",
@@ -138,7 +138,8 @@ export default function Home() {
   }, [demoMode]);
 
   useEffect(() => {
-    const localDemo = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const localDemo = process.env.NODE_ENV === "development"
+      && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
     if (localDemo) {
       window.setTimeout(() => {
         setDemoMode(true);
@@ -295,7 +296,7 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
     <section className="server-hero" aria-label="Краткое состояние сервера">
       <div className="server-identity">
         <div className="server-orbit" aria-hidden="true"><span>SP</span></div>
-        <div><p className="eyebrow">Основной узел</p><h2>{metrics.hostname}</h2><p>Ubuntu 24.04 LTS · локальный агент · защищённые операции</p></div>
+        <div><p className="eyebrow">Основной узел</p><h2>{metrics.hostname}</h2><p>Ubuntu LTS · локальный агент · защищённые операции</p></div>
       </div>
       <dl className="server-facts">
         <div><dt>Состояние</dt><dd className="online-value"><span className="status-dot" />В сети</dd></div>
