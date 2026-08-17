@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-type Tab = "overview" | "containers" | "diagnostics" | "audit";
+type Tab = "overview" | "hardware" | "containers" | "diagnostics" | "audit";
 type ContainerAction = "start" | "stop" | "restart";
 
 type User = { username: string; role: "admin" | "operator" | "viewer" };
@@ -50,10 +50,25 @@ type Metrics = {
   load: [number, number, number];
   memoryTotalBytes: number;
   memoryUsedBytes: number;
+  swapTotalBytes: number;
+  swapUsedBytes: number;
   diskTotalBytes: number;
   diskUsedBytes: number;
   uptimeSeconds: number;
   temperatures: Array<{ label: string; celsius: number }>;
+  fans: Array<{ label: string; rpm: number; pwmDetected: boolean }>;
+  power: {
+    governor: string;
+    availableGovernors: string[];
+    driver: string;
+    currentFrequencyMHz: number;
+    minimumFrequencyMHz: number;
+    maximumFrequencyMHz: number;
+    platformProfile: string;
+    availableProfiles: string[];
+    controlSupported: boolean;
+    controlDisabledReason: string;
+  };
   network: { receivedBytes: number; transmittedBytes: number };
 };
 
@@ -77,6 +92,8 @@ const demoMetrics: Metrics = {
   load: [5.18, 4.72, 4.31],
   memoryTotalBytes: 128 * 1024 ** 3,
   memoryUsedBytes: 52.4 * 1024 ** 3,
+  swapTotalBytes: 8 * 1024 ** 3,
+  swapUsedBytes: 384 * 1024 ** 2,
   diskTotalBytes: 3.64 * 1024 ** 4,
   diskUsedBytes: 2.14 * 1024 ** 4,
   uptimeSeconds: 18 * 86400 + 14 * 3600 + 22 * 60,
@@ -84,6 +101,19 @@ const demoMetrics: Metrics = {
     { label: "CPU 1 Package", celsius: 58 },
     { label: "CPU 2 Package", celsius: 61 },
   ],
+  fans: [],
+  power: {
+    governor: "schedutil",
+    availableGovernors: ["performance", "powersave", "schedutil"],
+    driver: "intel_cpufreq",
+    currentFrequencyMHz: 2680,
+    minimumFrequencyMHz: 1200,
+    maximumFrequencyMHz: 3600,
+    platformProfile: "",
+    availableProfiles: [],
+    controlSupported: false,
+    controlDisabledReason: "Только безопасное чтение до проверки профилей на этом сервере.",
+  },
   network: { receivedBytes: 1.82 * 1024 ** 4, transmittedBytes: 684 * 1024 ** 3 },
 };
 
@@ -199,6 +229,7 @@ export default function Home() {
 
   const usage = useMemo(() => ({
     memory: ratio(metrics.memoryUsedBytes, metrics.memoryTotalBytes),
+    swap: ratio(metrics.swapUsedBytes, metrics.swapTotalBytes),
     disk: ratio(metrics.diskUsedBytes, metrics.diskTotalBytes),
     maxTemperature: Math.max(0, ...metrics.temperatures.map((item) => item.celsius)),
   }), [metrics]);
@@ -278,6 +309,7 @@ export default function Home() {
         <div className="brand"><span className="brand-mark">SP</span><span>ServerPanel<small>Control plane · 0.1</small></span></div>
         <nav className="nav-list">
           <NavButton active={tab === "overview"} icon="overview" label="Обзор" badge="live" onClick={() => setTab("overview")} />
+          <NavButton active={tab === "hardware"} icon="hardware" label="Питание" badge={String(metrics.temperatures.length)} onClick={() => setTab("hardware")} />
           <NavButton active={tab === "containers"} icon="containers" label="Контейнеры" badge={String(containers.length)} onClick={() => setTab("containers")} />
           <NavButton active={tab === "diagnostics"} icon="diagnostics" label="Диагностика" badge={String(findings.filter((item) => item.severity !== "ok").length)} onClick={() => setTab("diagnostics")} />
           <NavButton active={tab === "audit"} icon="audit" label="Журнал" onClick={() => setTab("audit")} />
@@ -300,6 +332,7 @@ export default function Home() {
         {demoMode && <div className="demo-banner"><strong>Режим предпросмотра.</strong> Показаны безопасные демонстрационные данные; на Ubuntu здесь появятся реальные метрики агента.</div>}
 
         {tab === "overview" && <Overview metrics={metrics} usage={usage} history={history} findings={findings} containers={containers} lastUpdated={lastUpdated} />}
+        {tab === "hardware" && <Hardware metrics={metrics} />}
         {tab === "containers" && <Containers containers={containers} onAction={(container, action) => setPendingAction({ container, action })} />}
         {tab === "diagnostics" && <Diagnostics findings={findings} />}
         {tab === "audit" && <Audit entries={auditEntries} />}
@@ -311,7 +344,7 @@ export default function Home() {
   );
 }
 
-function Overview({ metrics, usage, history, findings, containers, lastUpdated }: { metrics: Metrics; usage: { memory: number; disk: number; maxTemperature: number }; history: number[]; findings: Finding[]; containers: Container[]; lastUpdated: Date }) {
+function Overview({ metrics, usage, history, findings, containers, lastUpdated }: { metrics: Metrics; usage: { memory: number; swap: number; disk: number; maxTemperature: number }; history: number[]; findings: Finding[]; containers: Container[]; lastUpdated: Date }) {
   const critical = findings.filter((item) => item.severity === "critical").length;
   const running = containers.filter((item) => item.state === "running").length;
   return <div className="page-stack">
@@ -331,6 +364,7 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
     <section className="metric-grid" aria-label="Текущие показатели">
       <MetricCard code="CPU" label="Процессоры" value={`${metrics.cpuPercent.toFixed(0)}%`} detail={`${metrics.system.cpuSockets || 1} сок. · ${metrics.system.cpuCores || metrics.cpuCount} ядер · ${metrics.system.cpuThreads || metrics.cpuCount} потоков`} progress={metrics.cpuPercent} tone="blue" />
       <MetricCard code="RAM" label="Оперативная память" value={`${usage.memory.toFixed(0)}%`} detail={`${formatBytes(metrics.memoryUsedBytes)} из ${formatBytes(metrics.memoryTotalBytes)}`} progress={usage.memory} tone="violet" />
+      <MetricCard code="SWAP" label="Подкачка" value={metrics.swapTotalBytes ? `${usage.swap.toFixed(0)}%` : "Отключена"} detail={metrics.swapTotalBytes ? `${formatBytes(metrics.swapUsedBytes)} из ${formatBytes(metrics.swapTotalBytes)}` : "Swap-раздел не настроен"} progress={usage.swap} tone="blue" />
       <MetricCard code="NVME" label="Хранилище" value={`${usage.disk.toFixed(0)}%`} detail={`${formatBytes(metrics.diskUsedBytes)} из ${formatBytes(metrics.diskTotalBytes)}`} progress={usage.disk} tone="amber" />
       <MetricCard code="TEMP" label="Макс. температура" value={usage.maxTemperature ? `${usage.maxTemperature.toFixed(0)}°C` : "Нет данных"} detail={metrics.temperatures.length ? `${metrics.temperatures.length} активных датчика` : "Датчики не обнаружены"} progress={usage.maxTemperature} tone="green" />
     </section>
@@ -375,6 +409,47 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
   </div>;
 }
 
+function Hardware({ metrics }: { metrics: Metrics }) {
+  const maximumTemperature = Math.max(0, ...metrics.temperatures.map((sensor) => sensor.celsius));
+  return <div className="page-stack">
+    <section className="summary-strip four" aria-label="Сводка питания и охлаждения">
+      <div><span className="summary-number">{metrics.power.governor || "—"}</span><span>CPU governor</span></div>
+      <div><span className="summary-number">{formatFrequency(metrics.power.currentFrequencyMHz)}</span><span>средняя частота</span></div>
+      <div><span className="summary-number">{maximumTemperature ? `${maximumTemperature.toFixed(0)}°C` : "—"}</span><span>макс. температура</span></div>
+      <div><span className="summary-number">{metrics.fans.length || "—"}</span><span>датчиков RPM</span></div>
+    </section>
+
+    <section className="dashboard-grid lower-grid">
+      <article className="panel capability-panel power-panel">
+        <div className="panel-header"><div><p className="eyebrow">CPU frequency policy</p><h2>Профиль энергопотребления</h2></div><span className="live-pill">только чтение</span></div>
+        <dl className="health-list">
+          <div><dt>Драйвер</dt><dd>{metrics.power.driver || "недоступно"}</dd></div>
+          <div><dt>Governor</dt><dd>{metrics.power.governor || "недоступно"}</dd></div>
+          <div><dt>Диапазон</dt><dd>{formatFrequency(metrics.power.minimumFrequencyMHz)} — {formatFrequency(metrics.power.maximumFrequencyMHz)}</dd></div>
+          <div><dt>Доступные governor</dt><dd>{metrics.power.availableGovernors.join(", ") || "не объявлены ядром"}</dd></div>
+          <div><dt>ACPI-профиль</dt><dd>{metrics.power.platformProfile || "не поддерживается"}</dd></div>
+        </dl>
+        <div className="segmented disabled" aria-label="Переключение профилей пока заблокировано"><span>Эко</span><span className="selected">Баланс</span><span>Турбо</span></div>
+        <small>{metrics.power.controlDisabledReason || "Переключение будет доступно после аппаратной проверки и настройки отката."}</small>
+      </article>
+
+      <article className="panel">
+        <div className="panel-header"><div><p className="eyebrow">hwmon / sysfs</p><h2>Температуры</h2></div><span className="count-pill">{metrics.temperatures.length}</span></div>
+        <div className="telemetry-list">
+          {metrics.temperatures.length ? metrics.temperatures.map((sensor, index) => <div className="telemetry-row" key={`${sensor.label}-${index}`}><span>{sensor.label}</span><strong className={sensor.celsius >= 85 ? "critical-value" : sensor.celsius >= 75 ? "warning-value" : "healthy-value"}>{sensor.celsius.toFixed(1)}°C</strong></div>) : <p className="empty-telemetry">Температурные датчики не обнаружены или недоступны агенту.</p>}
+        </div>
+      </article>
+    </section>
+
+    <section className="panel">
+      <div className="panel-header"><div><p className="eyebrow">Охлаждение</p><h2>Вентиляторы</h2><p className="panel-description">RPM отображается только при наличии hwmon/IPMI-датчиков. Наличие PWM-файла ещё не означает, что запись безопасна.</p></div><span className="count-pill">{metrics.fans.length}</span></div>
+      <div className="telemetry-list fan-list">
+        {metrics.fans.length ? metrics.fans.map((fan, index) => <div className="telemetry-row" key={`${fan.label}-${index}`}><span>{fan.label}<small>{fan.pwmDetected ? "PWM обнаружен · управление заблокировано" : "только датчик оборотов"}</small></span><strong>{fan.rpm.toFixed(0)} RPM</strong></div>) : <p className="empty-telemetry">ОС не видит датчики оборотов. Для этого сервера потребуется определить наличие BMC/IPMI или поддержку платы до добавления управления.</p>}
+      </div>
+    </section>
+  </div>;
+}
+
 function Containers({ containers, onAction }: { containers: Container[]; onAction: (container: Container, action: ContainerAction) => void }) {
   return <section className="panel table-panel">
     <div className="panel-header table-heading"><div><p className="eyebrow">Docker Engine</p><h2>{containers.length} контейнера</h2><p>Только разрешённые действия без произвольных консольных команд.</p></div><div className="legend"><span><i className="status-dot" /> работает</span><span><i className="status-dot stopped" /> остановлен</span></div></div>
@@ -396,7 +471,7 @@ function MetricCard({ code, label, value, detail, progress, tone }: { code: stri
   return <article className={`metric-card ${tone}`}><div className="metric-label"><span><i />{label}</span><small>{code}</small></div><strong className="metric-value">{value}</strong><p>{detail}</p><div className="progress-track"><span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div></article>;
 }
 
-type NavIconName = "overview" | "containers" | "diagnostics" | "audit";
+type NavIconName = "overview" | "hardware" | "containers" | "diagnostics" | "audit";
 
 function NavButton({ active, icon, label, badge, onClick }: { active: boolean; icon: NavIconName; label: string; badge?: string; onClick: () => void }) {
   return <button type="button" className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={onClick}><span className="nav-label"><NavIcon name={icon} />{label}</span>{badge && <small>{badge}</small>}</button>;
@@ -405,6 +480,7 @@ function NavButton({ active, icon, label, badge, onClick }: { active: boolean; i
 function NavIcon({ name }: { name: NavIconName }) {
   const paths = {
     overview: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+    hardware: <><path d="M13 2 5.5 13h5L9.8 22 18.5 10h-5L13 2Z" /><path d="M4 4v5" /><path d="M2 6.5h4" /></>,
     containers: <><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z" /><path d="m4 12 8 4.5 8-4.5" /><path d="m4 16.5 8 4.5 8-4.5" /></>,
     diagnostics: <><path d="M12 3 4.5 6v5.5c0 4.5 3 7.7 7.5 9.5 4.5-1.8 7.5-5 7.5-9.5V6L12 3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
     audit: <><path d="M6 4h12" /><path d="M6 9h12" /><path d="M6 14h8" /><path d="M6 19h5" /><circle cx="18" cy="18" r="3" /></>,
@@ -426,8 +502,9 @@ function LoadingScreen() { return <main className="loading-screen"><div classNam
 function ratio(used: number, total: number) { return total > 0 ? used / total * 100 : 0; }
 function formatBytes(bytes: number) { if (!bytes) return "0 Б"; const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"]; const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return `${(bytes / 1024 ** power).toLocaleString("ru-RU", { maximumFractionDigits: power > 2 ? 1 : 0 })} ${units[power]}`; }
 function formatUptime(seconds: number) { const days = Math.floor(seconds / 86400); const hours = Math.floor((seconds % 86400) / 3600); return `${days} д ${hours} ч`; }
-function tabTitle(tab: Tab) { return ({ overview: "Обзор сервера", containers: "Docker-контейнеры", diagnostics: "Диагностика", audit: "Журнал действий" })[tab]; }
-function tabDescription(tab: Tab) { return ({ overview: "Живое состояние, ресурсы и ключевые риски узла.", containers: "Контроль жизненного цикла разрешённых контейнеров.", diagnostics: "Проблемы, рекомендации и состояние защиты.", audit: "Проверяемая история входов и привилегированных операций." })[tab]; }
+function tabTitle(tab: Tab) { return ({ overview: "Обзор сервера", hardware: "Питание и охлаждение", containers: "Docker-контейнеры", diagnostics: "Диагностика", audit: "Журнал действий" })[tab]; }
+function tabDescription(tab: Tab) { return ({ overview: "Живое состояние, ресурсы и ключевые риски узла.", hardware: "Частоты CPU, governor, swap, температуры и доступность датчиков вентиляторов.", containers: "Контроль жизненного цикла разрешённых контейнеров.", diagnostics: "Проблемы, рекомендации и состояние защиты.", audit: "Проверяемая история входов и привилегированных операций." })[tab]; }
 function roleLabel(role: User["role"]) { return ({ admin: "Администратор", operator: "Оператор", viewer: "Наблюдатель" })[role]; }
 function severityLabel(severity: Finding["severity"]) { return ({ ok: "Норма", info: "Информация", warning: "Внимание", critical: "Критично" })[severity]; }
 function labelAction(action: ContainerAction) { return ({ start: "Запустить", stop: "Остановить", restart: "Перезапустить" })[action]; }
+function formatFrequency(megahertz: number) { return megahertz > 0 ? `${(megahertz / 1000).toFixed(2)} ГГц` : "—"; }

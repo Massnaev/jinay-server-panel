@@ -36,6 +36,10 @@ test("keeps the MVP security and accessibility boundaries visible in source", as
   assert.match(page, /credentials: "include"/);
   assert.match(page, /Подтверждение операции/);
   assert.match(page, /Режим предпросмотра/);
+  assert.match(page, /Питание и охлаждение/);
+  assert.match(page, /SWAP/);
+  assert.match(page, /controlDisabledReason/);
+  assert.doesNotMatch(page, /\/api\/power|\/api\/fans/);
   assert.match(page, /process\.env\.NODE_ENV === "development"/);
   assert.doesNotMatch(exportedHtml, /\.vinext\/fonts|[A-Z]:\\/i);
   assert.match(exportedHtml, /\/assets\//);

@@ -21,7 +21,7 @@
 
 ## Phase 2 — power and hardware
 
-- [ ] Detect supported power-profile and CPU governor interfaces
+- [x] Read-only detection of power-profile, CPU governor, temperature and fan interfaces
 - [ ] Eco, balanced and turbo profiles with measured before/after impact
 - [ ] Hardware-specific IPMI/Redfish integration
 - [ ] Fan-control support only for detected and explicitly supported hardware

@@ -10,6 +10,8 @@ The React interface is exported to static HTML, CSS and JavaScript during the tr
 
 The agent is the only component allowed to inspect host telemetry or request an operational action. It listens on loopback or a Unix socket, validates the session and CSRF token, checks the caller role, validates typed parameters, executes a fixed command, and appends an audit event.
 
+Read-only hardware telemetry includes swap, CPU frequency policy, ACPI platform-profile availability, hwmon temperatures, fan RPM, and the presence of PWM interfaces. Detection never implies authorization to write. Power-profile and fan mutation routes do not exist until a platform-specific helper, thermal limits, confirmation, audit, and automatic rollback are implemented and validated on the target hardware.
+
 ### Same-origin API
 
 The browser calls the agent through the same origin, so there is no generic application proxy. The Go router exposes only the documented API and a public-file allowlist (`/`, `/assets/*`, and `/favicon.svg`). An external Caddy, Nginx, or Tailscale HTTPS edge terminates TLS and forwards traffic to the loopback agent.
