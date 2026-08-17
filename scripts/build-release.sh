@@ -23,6 +23,11 @@ npm ci --ignore-scripts --no-audit --no-fund
 npm run lint
 npm test
 
+(
+  cd "${project_root}/agent"
+  go test ./...
+)
+
 stage="${temporary_dir}/serverpanel"
 mkdir -p "${stage}/bin" "${stage}/web" "${stage}/deploy"
 

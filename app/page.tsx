@@ -34,7 +34,18 @@ type AuditEntry = {
 };
 type Metrics = {
   hostname: string;
+  platform: string;
   cpuCount: number;
+  system: {
+    osName: string;
+    kernelVersion: string;
+    architecture: string;
+    cpuModel: string;
+    cpuSockets: number;
+    cpuCores: number;
+    cpuThreads: number;
+    cpuMaxFrequencyMHz: number;
+  };
   cpuPercent: number;
   load: [number, number, number];
   memoryTotalBytes: number;
@@ -50,7 +61,18 @@ const API_BASE = "/api";
 
 const demoMetrics: Metrics = {
   hostname: "ubuntu-xeon-01",
+  platform: "linux",
   cpuCount: 32,
+  system: {
+    osName: "Ubuntu 26.04 LTS",
+    kernelVersion: "7.0.0-generic",
+    architecture: "amd64",
+    cpuModel: "Intel Xeon E5-2689 0 @ 2.60GHz",
+    cpuSockets: 2,
+    cpuCores: 16,
+    cpuThreads: 32,
+    cpuMaxFrequencyMHz: 3600,
+  },
   cpuPercent: 34,
   load: [5.18, 4.72, 4.31],
   memoryTotalBytes: 128 * 1024 ** 3,
@@ -296,18 +318,18 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
     <section className="server-hero" aria-label="Краткое состояние сервера">
       <div className="server-identity">
         <div className="server-orbit" aria-hidden="true"><span>SP</span></div>
-        <div><p className="eyebrow">Основной узел</p><h2>{metrics.hostname}</h2><p>Ubuntu LTS · локальный агент · защищённые операции</p></div>
+        <div><p className="eyebrow">Основной узел</p><h2>{metrics.hostname}</h2><p>{metrics.system.osName || "Linux"} · {metrics.system.cpuModel || "локальный агент"}</p></div>
       </div>
       <dl className="server-facts">
         <div><dt>Состояние</dt><dd className="online-value"><span className="status-dot" />В сети</dd></div>
         <div><dt>Uptime</dt><dd>{formatUptime(metrics.uptimeSeconds)}</dd></div>
-        <div><dt>Docker</dt><dd>{running}/{containers.length}</dd></div>
+        <div><dt>CPU</dt><dd>{metrics.system.cpuCores || metrics.cpuCount}C / {metrics.system.cpuThreads || metrics.cpuCount}T</dd></div>
         <div><dt>Load 1m</dt><dd>{metrics.load[0]?.toFixed(2) || "0.00"}</dd></div>
       </dl>
     </section>
 
     <section className="metric-grid" aria-label="Текущие показатели">
-      <MetricCard code="CPU" label="Процессоры" value={`${metrics.cpuPercent.toFixed(0)}%`} detail={`${metrics.cpuCount} потоков · load ${metrics.load[0]?.toFixed(2) || "0.00"}`} progress={metrics.cpuPercent} tone="blue" />
+      <MetricCard code="CPU" label="Процессоры" value={`${metrics.cpuPercent.toFixed(0)}%`} detail={`${metrics.system.cpuSockets || 1} сок. · ${metrics.system.cpuCores || metrics.cpuCount} ядер · ${metrics.system.cpuThreads || metrics.cpuCount} потоков`} progress={metrics.cpuPercent} tone="blue" />
       <MetricCard code="RAM" label="Оперативная память" value={`${usage.memory.toFixed(0)}%`} detail={`${formatBytes(metrics.memoryUsedBytes)} из ${formatBytes(metrics.memoryTotalBytes)}`} progress={usage.memory} tone="violet" />
       <MetricCard code="NVME" label="Хранилище" value={`${usage.disk.toFixed(0)}%`} detail={`${formatBytes(metrics.diskUsedBytes)} из ${formatBytes(metrics.diskTotalBytes)}`} progress={usage.disk} tone="amber" />
       <MetricCard code="TEMP" label="Макс. температура" value={usage.maxTemperature ? `${usage.maxTemperature.toFixed(0)}°C` : "Нет данных"} detail={metrics.temperatures.length ? `${metrics.temperatures.length} активных датчика` : "Датчики не обнаружены"} progress={usage.maxTemperature} tone="green" />
@@ -326,6 +348,11 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
       <article className="panel health-panel">
         <div className="panel-header"><div><p className="eyebrow">Состояние</p><h2>{critical ? "Требуется внимание" : "Система стабильна"}</h2></div><span className={`health-score ${critical ? "danger" : "healthy"}`}>{critical ? critical : "A"}</span></div>
         <dl className="health-list">
+          <div><dt>Операционная система</dt><dd>{metrics.system.osName || metrics.platform}</dd></div>
+          <div><dt>Ядро</dt><dd>{metrics.system.kernelVersion || "—"}</dd></div>
+          <div><dt>Архитектура</dt><dd>{metrics.system.architecture || "—"}</dd></div>
+          <div><dt>Модель CPU</dt><dd>{metrics.system.cpuModel || "—"}</dd></div>
+          <div><dt>Макс. частота</dt><dd>{metrics.system.cpuMaxFrequencyMHz ? `${(metrics.system.cpuMaxFrequencyMHz / 1000).toFixed(2)} ГГц` : "—"}</dd></div>
           <div><dt>Uptime</dt><dd>{formatUptime(metrics.uptimeSeconds)}</dd></div>
           <div><dt>Docker</dt><dd>{running} из {containers.length} запущено</dd></div>
           <div><dt>Входящий трафик</dt><dd>{formatBytes(metrics.network.receivedBytes)}</dd></div>

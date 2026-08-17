@@ -12,10 +12,22 @@ type Network struct {
 	TransmittedBytes uint64 `json:"transmittedBytes"`
 }
 
+type SystemInfo struct {
+	OSName             string  `json:"osName"`
+	KernelVersion      string  `json:"kernelVersion"`
+	Architecture       string  `json:"architecture"`
+	CPUModel           string  `json:"cpuModel"`
+	CPUSockets         int     `json:"cpuSockets"`
+	CPUCores           int     `json:"cpuCores"`
+	CPUThreads         int     `json:"cpuThreads"`
+	CPUMaxFrequencyMHz float64 `json:"cpuMaxFrequencyMHz"`
+}
+
 type Metrics struct {
 	Timestamp         time.Time     `json:"timestamp"`
 	Hostname          string        `json:"hostname"`
 	Platform          string        `json:"platform"`
+	System            SystemInfo    `json:"system"`
 	CPUCount          int           `json:"cpuCount"`
 	CPUPercent        float64       `json:"cpuPercent"`
 	Load              [3]float64    `json:"load"`

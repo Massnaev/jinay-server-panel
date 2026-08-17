@@ -26,6 +26,7 @@ func ReadMetrics() (Metrics, error) {
 		Hostname:     hostname,
 		Platform:     "linux",
 		CPUCount:     runtime.NumCPU(),
+		System:       readSystemInfo(),
 		Temperatures: []Temperature{},
 	}
 
@@ -61,6 +62,75 @@ func ReadMetrics() (Metrics, error) {
 	metrics.Network = readNetwork()
 	metrics.Temperatures = readTemperatures()
 	return metrics, nil
+}
+
+func readSystemInfo() SystemInfo {
+	info := SystemInfo{
+		OSName:       "Linux",
+		Architecture: runtime.GOARCH,
+		CPUThreads:   runtime.NumCPU(),
+	}
+	if content, err := os.ReadFile("/etc/os-release"); err == nil {
+		info.OSName = parseOSRelease(string(content))
+	}
+	if content, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		info.KernelVersion = strings.TrimSpace(string(content))
+	}
+	if content, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		parsed := parseCPUInfo(string(content))
+		info.CPUModel = parsed.CPUModel
+		info.CPUSockets = parsed.CPUSockets
+		info.CPUCores = parsed.CPUCores
+	}
+	if info.CPUSockets == 0 {
+		info.CPUSockets = 1
+	}
+	if info.CPUCores == 0 {
+		info.CPUCores = info.CPUThreads
+	}
+	if content, err := os.ReadFile("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"); err == nil {
+		kilohertz, _ := strconv.ParseFloat(strings.TrimSpace(string(content)), 64)
+		info.CPUMaxFrequencyMHz = kilohertz / 1000
+	}
+	return info
+}
+
+func parseOSRelease(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		if !strings.HasPrefix(line, "PRETTY_NAME=") {
+			continue
+		}
+		return strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), "\"'")
+	}
+	return "Linux"
+}
+
+func parseCPUInfo(content string) SystemInfo {
+	info := SystemInfo{}
+	sockets := make(map[string]struct{})
+	cores := make(map[string]struct{})
+	for _, block := range strings.Split(strings.TrimSpace(content), "\n\n") {
+		values := make(map[string]string)
+		for _, line := range strings.Split(block, "\n") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				values[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
+		}
+		if info.CPUModel == "" {
+			info.CPUModel = values["model name"]
+		}
+		physicalID, coreID := values["physical id"], values["core id"]
+		if physicalID != "" {
+			sockets[physicalID] = struct{}{}
+			if coreID != "" {
+				cores[physicalID+":"+coreID] = struct{}{}
+			}
+		}
+	}
+	info.CPUSockets = len(sockets)
+	info.CPUCores = len(cores)
+	return info
 }
 
 func readCPUTimes() (cpuTimes, error) {

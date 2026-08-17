@@ -13,10 +13,17 @@ func ReadMetrics() (Metrics, error) {
 	var memory runtime.MemStats
 	runtime.ReadMemStats(&memory)
 	return Metrics{
-		Timestamp:         time.Now().UTC(),
-		Hostname:          hostname,
-		Platform:          runtime.GOOS,
-		CPUCount:          runtime.NumCPU(),
+		Timestamp: time.Now().UTC(),
+		Hostname:  hostname,
+		Platform:  runtime.GOOS,
+		CPUCount:  runtime.NumCPU(),
+		System: SystemInfo{
+			OSName:       runtime.GOOS,
+			Architecture: runtime.GOARCH,
+			CPUSockets:   1,
+			CPUCores:     runtime.NumCPU(),
+			CPUThreads:   runtime.NumCPU(),
+		},
 		MemoryTotalBytes:  memory.Sys,
 		MemoryUsedBytes:   memory.Alloc,
 		Temperatures:      []Temperature{},

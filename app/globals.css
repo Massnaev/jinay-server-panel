@@ -140,7 +140,7 @@ h2 { margin: 0; font-size: 18px; line-height: 1.3; letter-spacing: -.025em; }
 .health-list { display: grid; gap: 0; margin: 20px 0 0; }
 .health-list > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid #202937; font-size: 11px; }
 .health-list dt { color: var(--text-muted); }
-.health-list dd { margin: 0; font-family: var(--font-geist-mono), monospace; text-align: right; }
+.health-list dd { max-width: 68%; margin: 0; overflow-wrap: anywhere; font-family: var(--font-geist-mono), monospace; text-align: right; }
 .finding-compact-list { display: grid; gap: 12px; margin-top: 18px; }
 .finding-compact { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding-top: 12px; border-top: 1px solid #202937; }
 .severity-marker { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--text-muted); }

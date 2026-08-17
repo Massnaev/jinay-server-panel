@@ -26,6 +26,7 @@ test("release exports a static interface and keeps Node off the server", async (
     readFile(new URL("../deploy/serverpanel-agent.service", import.meta.url), "utf8"),
   ]);
   assert.match(build, /-X main\.version=\$\{release_version\}/);
+  assert.match(build, /go test \.\/\.\.\./);
   assert.match(build, /cp -R dist\/client\/\./);
   assert.doesNotMatch(build, /nodejs\.org|runtime\/bin\/node|node_modules.*stage/);
   assert.match(agentUnit, /MemoryDenyWriteExecute=true/);
