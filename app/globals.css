@@ -198,13 +198,13 @@ tbody tr:hover { background: #111823; }
 }
 
 @media (max-width: 760px) {
-  .sidebar { position: sticky; top: 0; width: auto; height: auto; flex-direction: row; align-items: center; padding: 10px 14px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .sidebar { position: sticky; top: 0; width: 100%; max-width: 100vw; min-width: 0; height: auto; flex-direction: row; align-items: center; padding: 10px 14px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: hidden; }
   .sidebar .brand small, .sidebar-footer, .nav-list small { display: none; }
   .brand { flex: 0 0 auto; }
-  .nav-list { display: flex; gap: 4px; margin: 0 0 0 14px; }
+  .nav-list { min-width: 0; display: flex; flex: 1 1 auto; gap: 4px; margin: 0 0 0 14px; overflow-x: auto; }
   .nav-list button { min-height: 42px; padding: 0 11px; white-space: nowrap; }
   .nav-list button.active { box-shadow: inset 0 -2px var(--primary); }
-  .main-content { margin-left: 0; padding: 18px 16px 40px; }
+  .main-content { width: 100%; min-width: 0; margin-left: 0; padding: 18px 16px 40px; overflow-x: hidden; }
   .topbar { align-items: flex-start; }
   .connection-state { display: none; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
