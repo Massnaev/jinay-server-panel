@@ -27,15 +27,19 @@ type PowerInfo struct {
 }
 
 type Network struct {
-	ReceivedBytes    uint64 `json:"receivedBytes"`
-	TransmittedBytes uint64 `json:"transmittedBytes"`
+	ReceivedBytes          uint64  `json:"receivedBytes"`
+	TransmittedBytes       uint64  `json:"transmittedBytes"`
+	ReceiveBytesPerSecond  float64 `json:"receiveBytesPerSecond"`
+	TransmitBytesPerSecond float64 `json:"transmitBytesPerSecond"`
 }
 
 type ProcessorInfo struct {
-	SocketID       string `json:"socketId"`
-	Model          string `json:"model"`
-	PhysicalCores  int    `json:"physicalCores"`
-	LogicalThreads int    `json:"logicalThreads"`
+	SocketID           string  `json:"socketId"`
+	Model              string  `json:"model"`
+	PhysicalCores      int     `json:"physicalCores"`
+	LogicalThreads     int     `json:"logicalThreads"`
+	UtilizationPercent float64 `json:"utilizationPercent"`
+	LogicalCPUIds      []int   `json:"-"`
 }
 
 type GPUInfo struct {

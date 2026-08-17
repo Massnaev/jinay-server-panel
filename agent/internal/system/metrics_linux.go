@@ -31,19 +31,28 @@ func ReadMetrics() (Metrics, error) {
 		Temperatures: []Temperature{},
 	}
 
-	first, err := readCPUTimes()
+	first, err := readCPUStats()
 	if err != nil {
 		return metrics, err
 	}
+	firstNetwork := readNetwork()
+	sampleStarted := time.Now()
 	time.Sleep(120 * time.Millisecond)
-	second, err := readCPUTimes()
+	second, err := readCPUStats()
 	if err != nil {
 		return metrics, err
 	}
-	totalDelta := second.total - first.total
-	idleDelta := second.idle - first.idle
-	if totalDelta > 0 {
-		metrics.CPUPercent = float64(totalDelta-idleDelta) / float64(totalDelta) * 100
+	secondNetwork := readNetwork()
+	sampleDuration := time.Since(sampleStarted)
+	metrics.CPUPercent = cpuUtilization(first.aggregate, second.aggregate)
+	for index := range metrics.System.Processors {
+		processor := &metrics.System.Processors[index]
+		var firstSocket, secondSocket cpuTimes
+		for _, logicalID := range processor.LogicalCPUIds {
+			firstSocket = addCPUTimes(firstSocket, first.logical[logicalID])
+			secondSocket = addCPUTimes(secondSocket, second.logical[logicalID])
+		}
+		processor.UtilizationPercent = cpuUtilization(firstSocket, secondSocket)
 	}
 
 	if load, err := os.ReadFile("/proc/loadavg"); err == nil {
@@ -62,7 +71,9 @@ func ReadMetrics() (Metrics, error) {
 	metrics.MemoryTotalBytes, metrics.MemoryUsedBytes = memory.Total, memory.Used
 	metrics.SwapTotalBytes, metrics.SwapUsedBytes = memory.SwapTotal, memory.SwapUsed
 	metrics.DiskTotalBytes, metrics.DiskUsedBytes = readDisk()
-	metrics.Network = readNetwork()
+	metrics.Network = secondNetwork
+	metrics.Network.ReceiveBytesPerSecond = counterRate(firstNetwork.ReceivedBytes, metrics.Network.ReceivedBytes, sampleDuration)
+	metrics.Network.TransmitBytesPerSecond = counterRate(firstNetwork.TransmittedBytes, metrics.Network.TransmittedBytes, sampleDuration)
 	metrics.Temperatures = readTemperatures()
 	metrics.Fans = readFans()
 	metrics.Power = readPowerInfo()
@@ -115,9 +126,10 @@ func parseOSRelease(content string) string {
 func parseCPUInfo(content string) SystemInfo {
 	info := SystemInfo{}
 	type socketData struct {
-		model   string
-		cores   map[string]struct{}
-		threads int
+		model      string
+		cores      map[string]struct{}
+		threads    int
+		logicalIDs []int
 	}
 	sockets := make(map[string]*socketData)
 	fallbackSocket := "0"
@@ -142,6 +154,9 @@ func parseCPUInfo(content string) SystemInfo {
 			sockets[physicalID] = socket
 		}
 		socket.threads++
+		if logicalID, err := strconv.Atoi(values["processor"]); err == nil {
+			socket.logicalIDs = append(socket.logicalIDs, logicalID)
+		}
 		if coreID := values["core id"]; coreID != "" {
 			socket.cores[coreID] = struct{}{}
 		}
@@ -167,7 +182,7 @@ func parseCPUInfo(content string) SystemInfo {
 		}
 		info.CPUCores += coreCount
 		info.Processors = append(info.Processors, ProcessorInfo{
-			SocketID: id, Model: socket.model, PhysicalCores: coreCount, LogicalThreads: socket.threads,
+			SocketID: id, Model: socket.model, PhysicalCores: coreCount, LogicalThreads: socket.threads, LogicalCPUIds: socket.logicalIDs,
 		})
 	}
 	return info
@@ -266,16 +281,46 @@ func readGPUTemperature(devicePath string) float64 {
 	return 0
 }
 
-func readCPUTimes() (cpuTimes, error) {
+type cpuStats struct {
+	aggregate cpuTimes
+	logical   map[int]cpuTimes
+}
+
+func readCPUStats() (cpuStats, error) {
 	content, err := os.ReadFile("/proc/stat")
 	if err != nil {
-		return cpuTimes{}, fmt.Errorf("read CPU statistics: %w", err)
+		return cpuStats{}, fmt.Errorf("read CPU statistics: %w", err)
 	}
-	line := strings.SplitN(string(content), "\n", 2)[0]
-	fields := strings.Fields(line)
-	if len(fields) < 5 || fields[0] != "cpu" {
-		return cpuTimes{}, fmt.Errorf("unexpected /proc/stat CPU row")
+	return parseCPUStats(string(content))
+}
+
+func parseCPUStats(content string) (cpuStats, error) {
+	stats := cpuStats{logical: make(map[int]cpuTimes)}
+	for _, line := range strings.Split(content, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 || !strings.HasPrefix(fields[0], "cpu") {
+			continue
+		}
+		times, err := parseCPUTimes(fields)
+		if err != nil {
+			return cpuStats{}, err
+		}
+		if fields[0] == "cpu" {
+			stats.aggregate = times
+			continue
+		}
+		logicalID, err := strconv.Atoi(strings.TrimPrefix(fields[0], "cpu"))
+		if err == nil {
+			stats.logical[logicalID] = times
+		}
 	}
+	if stats.aggregate.total == 0 {
+		return cpuStats{}, fmt.Errorf("unexpected /proc/stat CPU rows")
+	}
+	return stats, nil
+}
+
+func parseCPUTimes(fields []string) (cpuTimes, error) {
 	var values []uint64
 	for _, field := range fields[1:] {
 		value, err := strconv.ParseUint(field, 10, 64)
@@ -293,6 +338,29 @@ func readCPUTimes() (cpuTimes, error) {
 		idle += values[4]
 	}
 	return cpuTimes{total: total, idle: idle}, nil
+}
+
+func addCPUTimes(left, right cpuTimes) cpuTimes {
+	return cpuTimes{total: left.total + right.total, idle: left.idle + right.idle}
+}
+
+func cpuUtilization(first, second cpuTimes) float64 {
+	if second.total <= first.total || second.idle < first.idle {
+		return 0
+	}
+	totalDelta := second.total - first.total
+	idleDelta := second.idle - first.idle
+	if idleDelta > totalDelta {
+		return 0
+	}
+	return float64(totalDelta-idleDelta) / float64(totalDelta) * 100
+}
+
+func counterRate(first, second uint64, duration time.Duration) float64 {
+	if second < first || duration <= 0 {
+		return 0
+	}
+	return float64(second-first) / duration.Seconds()
 }
 
 type memoryInfo struct {

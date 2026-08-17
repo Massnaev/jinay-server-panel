@@ -9,7 +9,8 @@ Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS ser
 
 - Responsive dark operations dashboard
 - CPU, memory, disk, load and temperature telemetry
-- Physical CPU socket topology and automatic DRM/PCI GPU detection
+- Physical CPU socket topology with per-socket load and automatic DRM/PCI GPU detection
+- Live inbound and outbound network speed
 - Local username/password authentication created from Ubuntu
 - Docker inventory with opt-in start, stop and restart actions
 - Health findings, audit history and recovery guidance

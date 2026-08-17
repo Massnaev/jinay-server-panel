@@ -2,7 +2,10 @@
 
 package system
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestParseOSRelease(t *testing.T) {
 	content := "NAME=Ubuntu\nPRETTY_NAME=\"Ubuntu 26.04 LTS\"\n"
@@ -47,6 +50,37 @@ core id : 1`
 	}
 	if info.Processors[1].SocketID != "1" || info.Processors[1].PhysicalCores != 2 || info.Processors[1].LogicalThreads != 2 {
 		t.Fatalf("unexpected second processor: %+v", info.Processors[1])
+	}
+	if len(info.Processors[0].LogicalCPUIds) != 2 || info.Processors[0].LogicalCPUIds[0] != 0 || info.Processors[1].LogicalCPUIds[0] != 2 {
+		t.Fatalf("unexpected logical CPU mapping: %+v", info.Processors)
+	}
+}
+
+func TestParseCPUStatsAndSocketUtilization(t *testing.T) {
+	first, err := parseCPUStats("cpu  100 0 50 850 0 0 0 0\ncpu0 50 0 25 425 0 0 0 0\ncpu1 50 0 25 425 0 0 0 0\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := parseCPUStats("cpu  130 0 60 910 0 0 0 0\ncpu0 70 0 30 450 0 0 0 0\ncpu1 60 0 30 460 0 0 0 0\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cpuUtilization(first.aggregate, second.aggregate); got != 40 {
+		t.Fatalf("unexpected aggregate utilization %.2f", got)
+	}
+	firstSocket := addCPUTimes(first.logical[0], first.logical[1])
+	secondSocket := addCPUTimes(second.logical[0], second.logical[1])
+	if got := cpuUtilization(firstSocket, secondSocket); got != 40 {
+		t.Fatalf("unexpected socket utilization %.2f", got)
+	}
+}
+
+func TestCounterRate(t *testing.T) {
+	if got := counterRate(1_000, 3_000, 2*time.Second); got != 1_000 {
+		t.Fatalf("unexpected counter rate %.2f", got)
+	}
+	if got := counterRate(3_000, 1_000, time.Second); got != 0 {
+		t.Fatalf("counter reset should return zero, got %.2f", got)
 	}
 }
 

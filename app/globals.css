@@ -190,9 +190,12 @@ tbody tr:hover { background: #111823; }
 .hardware-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .device-grid { display: grid; gap: 10px; margin-top: 18px; }
 .device-card { padding: 14px; border: 1px solid #253145; border-radius: 10px; background: #0b111a; }
+.device-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.device-load { color: #a8c8ff; font: 700 14px var(--font-geist-mono), monospace; }
 .device-card strong { display: block; margin-top: 6px; color: var(--text); font-size: 12px; }
 .device-card p { margin: 5px 0 0; color: var(--text-muted); font: 10px var(--font-geist-mono), monospace; }
 .device-index { color: #8eb7ff; font: 700 9px var(--font-geist-mono), monospace; letter-spacing: .08em; text-transform: uppercase; }
+.progress-track.compact { height: 3px; margin-top: 11px; }
 .summary-number { color: var(--text); font: 650 27px var(--font-geist-mono), monospace; }
 .power-panel { gap: 18px; }
 .power-glossary { display: grid; gap: 7px; padding: 13px; border: 1px solid var(--border); border-radius: 9px; background: #0a0f17; }

@@ -40,6 +40,9 @@ test("keeps the MVP security and accessibility boundaries visible in source", as
   assert.match(page, /SWAP/);
   assert.match(page, /controlDisabledReason/);
   assert.match(page, /Физическая топология/);
+  assert.match(page, /utilizationPercent/);
+  assert.match(page, /receiveBytesPerSecond/);
+  assert.match(page, /Сеть сейчас/);
   assert.match(page, /Видеокарты/);
   assert.match(page, /Диагностика ничего не меняет/);
   assert.doesNotMatch(page, /\/api\/power|\/api\/fans/);

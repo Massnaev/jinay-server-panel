@@ -45,7 +45,7 @@ type Metrics = {
     cpuCores: number;
     cpuThreads: number;
     cpuMaxFrequencyMHz: number;
-    processors: Array<{ socketId: string; model: string; physicalCores: number; logicalThreads: number }>;
+    processors: Array<{ socketId: string; model: string; physicalCores: number; logicalThreads: number; utilizationPercent: number }>;
     gpus: Array<{ card: string; model: string; vendor: string; vendorId: string; deviceId: string; pciSlot: string; driver: string; temperatureCelsius?: number }>;
   };
   cpuPercent: number;
@@ -71,7 +71,7 @@ type Metrics = {
     controlSupported: boolean;
     controlDisabledReason: string;
   };
-  network: { receivedBytes: number; transmittedBytes: number };
+  network: { receivedBytes: number; transmittedBytes: number; receiveBytesPerSecond: number; transmitBytesPerSecond: number };
 };
 
 const API_BASE = "/api";
@@ -90,8 +90,8 @@ const demoMetrics: Metrics = {
     cpuThreads: 32,
     cpuMaxFrequencyMHz: 3600,
     processors: [
-      { socketId: "0", model: "Intel Xeon E5-2689 0 @ 2.60GHz", physicalCores: 8, logicalThreads: 16 },
-      { socketId: "1", model: "Intel Xeon E5-2689 0 @ 2.60GHz", physicalCores: 8, logicalThreads: 16 },
+      { socketId: "0", model: "Intel Xeon E5-2689 0 @ 2.60GHz", physicalCores: 8, logicalThreads: 16, utilizationPercent: 29 },
+      { socketId: "1", model: "Intel Xeon E5-2689 0 @ 2.60GHz", physicalCores: 8, logicalThreads: 16, utilizationPercent: 39 },
     ],
     gpus: [{ card: "card0", model: "G92 [GeForce GTS 250]", vendor: "NVIDIA", vendorId: "10de", deviceId: "0615", pciSlot: "0000:03:00.0", driver: "nouveau", temperatureCelsius: 49 }],
   },
@@ -121,7 +121,7 @@ const demoMetrics: Metrics = {
     controlSupported: false,
     controlDisabledReason: "Только безопасное чтение до проверки профилей на этом сервере.",
   },
-  network: { receivedBytes: 1.82 * 1024 ** 4, transmittedBytes: 684 * 1024 ** 3 },
+  network: { receivedBytes: 1.82 * 1024 ** 4, transmittedBytes: 684 * 1024 ** 3, receiveBytesPerSecond: 18.4 * 1024 ** 2, transmitBytesPerSecond: 2.7 * 1024 ** 2 },
 };
 
 const demoContainers: Container[] = [
@@ -400,7 +400,8 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
           <div><dt>Макс. частота</dt><dd>{metrics.system.cpuMaxFrequencyMHz ? `${(metrics.system.cpuMaxFrequencyMHz / 1000).toFixed(2)} ГГц` : "—"}</dd></div>
           <div><dt>Uptime</dt><dd>{formatUptime(metrics.uptimeSeconds)}</dd></div>
           <div><dt>Docker</dt><dd>{running} из {containers.length} запущено</dd></div>
-          <div><dt>Входящий трафик</dt><dd>{formatBytes(metrics.network.receivedBytes)}</dd></div>
+          <div><dt>Сеть сейчас</dt><dd>↓ {formatRate(metrics.network.receiveBytesPerSecond)} · ↑ {formatRate(metrics.network.transmitBytesPerSecond)}</dd></div>
+          <div><dt>Трафик с запуска ОС</dt><dd>↓ {formatBytes(metrics.network.receivedBytes)} · ↑ {formatBytes(metrics.network.transmittedBytes)}</dd></div>
           <div><dt>Последнее обновление</dt><dd>{lastUpdated.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</dd></div>
         </dl>
       </article>
@@ -436,7 +437,7 @@ function Hardware({ metrics }: { metrics: Metrics }) {
       <article className="panel">
         <div className="panel-header"><div><p className="eyebrow">Физическая топология</p><h2>Процессоры</h2><p className="panel-description">Каждый сокет показан отдельно — это не число потоков и не одна повторённая модель.</p></div><span className="count-pill">{processors.length || metrics.system.cpuSockets}</span></div>
         <div className="device-grid">
-          {processors.length ? processors.map((processor, index) => <div className="device-card" key={processor.socketId}><span className="device-index">CPU {index + 1}</span><strong>{processor.model || metrics.system.cpuModel}</strong><p>Сокет {processor.socketId} · {processor.physicalCores} ядер · {processor.logicalThreads} потоков</p></div>) : <p className="empty-telemetry">Ядро сообщило общую топологию, но не предоставило идентификаторы физических сокетов.</p>}
+          {processors.length ? processors.map((processor, index) => <div className="device-card" key={processor.socketId}><div className="device-card-top"><span className="device-index">CPU {index + 1}</span><span className="device-load">{(processor.utilizationPercent ?? 0).toFixed(0)}%</span></div><strong>{processor.model || metrics.system.cpuModel}</strong><p>Сокет {processor.socketId} · {processor.physicalCores} ядер · {processor.logicalThreads} потоков</p><div className="progress-track compact"><span style={{ width: `${Math.min(100, Math.max(0, processor.utilizationPercent ?? 0))}%` }} /></div></div>) : <p className="empty-telemetry">Ядро сообщило общую топологию, но не предоставило идентификаторы физических сокетов.</p>}
         </div>
       </article>
       <article className="panel">
@@ -537,3 +538,4 @@ function roleLabel(role: User["role"]) { return ({ admin: "Администра�
 function severityLabel(severity: Finding["severity"]) { return ({ ok: "Норма", info: "Информация", warning: "Внимание", critical: "Критично" })[severity]; }
 function labelAction(action: ContainerAction) { return ({ start: "Запустить", stop: "Остановить", restart: "Перезапустить" })[action]; }
 function formatFrequency(megahertz: number) { return megahertz > 0 ? `${(megahertz / 1000).toFixed(2)} ГГц` : "—"; }
+function formatRate(bytesPerSecond: number) { return `${formatBytes(bytesPerSecond)}/с`; }
