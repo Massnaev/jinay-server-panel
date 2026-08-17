@@ -9,6 +9,8 @@ test("installer keeps the MVP services private and privileged actions disabled",
   assert.match(installer, /SERVERPANEL_ENABLE_DOCKER_ACTIONS=false/);
   assert.match(installer, /runtime\/bin\/node/);
   assert.match(installer, /sha256sum --check --status/);
+  assert.match(installer, /install -d -m 0755 "\$\{install_root\}"/);
+  assert.match(installer, /install -d -m 0700 "\$\{data_dir\}"/);
   assert.doesNotMatch(installer, /OWNER\/serverpanel/);
 });
 

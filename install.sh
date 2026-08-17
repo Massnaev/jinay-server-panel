@@ -53,9 +53,10 @@ curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
   sha256sum --check --status "${asset}.sha256"
 ) || fail "release checksum verification failed"
 
-mkdir -p "${install_root}/releases" "${data_dir}" "${config_dir}"
+install -d -m 0755 "${install_root}" "${install_root}/releases" "${config_dir}"
+install -d -m 0700 "${data_dir}"
 release_dir="${install_root}/releases/${release_id}"
-mkdir -p "${release_dir}"
+install -d -m 0755 "${release_dir}"
 tar --extract --gzip --file "${temporary_dir}/${asset}" --directory "${release_dir}" --no-same-owner
 
 [[ -x "${release_dir}/bin/serverpanel-agent" ]] || fail "release is missing bin/serverpanel-agent"
