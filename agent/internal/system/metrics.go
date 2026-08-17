@@ -7,6 +7,25 @@ type Temperature struct {
 	Celsius float64 `json:"celsius"`
 }
 
+type Fan struct {
+	Label       string  `json:"label"`
+	RPM         float64 `json:"rpm"`
+	PWMDetected bool    `json:"pwmDetected"`
+}
+
+type PowerInfo struct {
+	Governor              string   `json:"governor"`
+	AvailableGovernors    []string `json:"availableGovernors"`
+	Driver                string   `json:"driver"`
+	CurrentFrequencyMHz   float64  `json:"currentFrequencyMHz"`
+	MinimumFrequencyMHz   float64  `json:"minimumFrequencyMHz"`
+	MaximumFrequencyMHz   float64  `json:"maximumFrequencyMHz"`
+	PlatformProfile       string   `json:"platformProfile"`
+	AvailableProfiles     []string `json:"availableProfiles"`
+	ControlSupported      bool     `json:"controlSupported"`
+	ControlDisabledReason string   `json:"controlDisabledReason"`
+}
+
 type Network struct {
 	ReceivedBytes    uint64 `json:"receivedBytes"`
 	TransmittedBytes uint64 `json:"transmittedBytes"`
@@ -33,10 +52,14 @@ type Metrics struct {
 	Load              [3]float64    `json:"load"`
 	MemoryTotalBytes  uint64        `json:"memoryTotalBytes"`
 	MemoryUsedBytes   uint64        `json:"memoryUsedBytes"`
+	SwapTotalBytes    uint64        `json:"swapTotalBytes"`
+	SwapUsedBytes     uint64        `json:"swapUsedBytes"`
 	DiskTotalBytes    uint64        `json:"diskTotalBytes"`
 	DiskUsedBytes     uint64        `json:"diskUsedBytes"`
 	Network           Network       `json:"network"`
 	Temperatures      []Temperature `json:"temperatures"`
+	Fans              []Fan         `json:"fans"`
+	Power             PowerInfo     `json:"power"`
 	UptimeSeconds     float64       `json:"uptimeSeconds"`
 	CollectionWarning string        `json:"collectionWarning,omitempty"`
 }
@@ -58,6 +81,7 @@ func UsageSummary(metrics Metrics) map[string]float64 {
 	return map[string]float64{
 		"cpuPercent":     metrics.CPUPercent,
 		"memoryPercent":  percent(metrics.MemoryUsedBytes, metrics.MemoryTotalBytes),
+		"swapPercent":    percent(metrics.SwapUsedBytes, metrics.SwapTotalBytes),
 		"diskPercent":    percent(metrics.DiskUsedBytes, metrics.DiskTotalBytes),
 		"maxTemperature": maxTemperature,
 	}

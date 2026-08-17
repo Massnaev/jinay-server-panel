@@ -57,10 +57,14 @@ func ReadMetrics() (Metrics, error) {
 			metrics.UptimeSeconds, _ = strconv.ParseFloat(fields[0], 64)
 		}
 	}
-	metrics.MemoryTotalBytes, metrics.MemoryUsedBytes = readMemory()
+	memory := readMemory()
+	metrics.MemoryTotalBytes, metrics.MemoryUsedBytes = memory.Total, memory.Used
+	metrics.SwapTotalBytes, metrics.SwapUsedBytes = memory.SwapTotal, memory.SwapUsed
 	metrics.DiskTotalBytes, metrics.DiskUsedBytes = readDisk()
 	metrics.Network = readNetwork()
 	metrics.Temperatures = readTemperatures()
+	metrics.Fans = readFans()
+	metrics.Power = readPowerInfo()
 	return metrics, nil
 }
 
@@ -162,14 +166,24 @@ func readCPUTimes() (cpuTimes, error) {
 	return cpuTimes{total: total, idle: idle}, nil
 }
 
-func readMemory() (uint64, uint64) {
-	file, err := os.Open("/proc/meminfo")
+type memoryInfo struct {
+	Total     uint64
+	Used      uint64
+	SwapTotal uint64
+	SwapUsed  uint64
+}
+
+func readMemory() memoryInfo {
+	content, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
-		return 0, 0
+		return memoryInfo{}
 	}
-	defer file.Close()
+	return parseMemoryInfo(string(content))
+}
+
+func parseMemoryInfo(content string) memoryInfo {
 	values := make(map[string]uint64)
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 2 {
@@ -185,7 +199,12 @@ func readMemory() (uint64, uint64) {
 	if available > total {
 		available = total
 	}
-	return total, total - available
+	swapTotal := values["SwapTotal"]
+	swapFree := values["SwapFree"]
+	if swapFree > swapTotal {
+		swapFree = swapTotal
+	}
+	return memoryInfo{Total: total, Used: total - available, SwapTotal: swapTotal, SwapUsed: swapTotal - swapFree}
 }
 
 func readDisk() (uint64, uint64) {
@@ -239,11 +258,128 @@ func readTemperatures() []Temperature {
 		if err != nil || milliCelsius <= 0 || milliCelsius > 150_000 {
 			continue
 		}
+		root := filepath.Dir(path)
+		chip := readTrimmed(filepath.Join(root, "name"))
 		label := filepath.Base(strings.TrimSuffix(path, "_input"))
 		if content, err := os.ReadFile(strings.TrimSuffix(path, "_input") + "_label"); err == nil {
 			label = strings.TrimSpace(string(content))
 		}
+		if chip != "" {
+			label = chip + " · " + label
+		}
 		temperatures = append(temperatures, Temperature{Label: label, Celsius: milliCelsius / 1000})
 	}
 	return temperatures
+}
+
+func readFans() []Fan {
+	paths, _ := filepath.Glob("/sys/class/hwmon/hwmon*/fan*_input")
+	fans := make([]Fan, 0, len(paths))
+	for _, path := range paths {
+		rpm, err := strconv.ParseFloat(readTrimmed(path), 64)
+		if err != nil || rpm < 0 {
+			continue
+		}
+		root := filepath.Dir(path)
+		base := strings.TrimSuffix(filepath.Base(path), "_input")
+		index := strings.TrimPrefix(base, "fan")
+		label := readTrimmed(filepath.Join(root, base+"_label"))
+		if label == "" {
+			label = "Fan " + index
+		}
+		if chip := readTrimmed(filepath.Join(root, "name")); chip != "" {
+			label = chip + " · " + label
+		}
+		_, pwmErr := os.Stat(filepath.Join(root, "pwm"+index))
+		fans = append(fans, Fan{Label: label, RPM: rpm, PWMDetected: pwmErr == nil})
+	}
+	return fans
+}
+
+func readPowerInfo() PowerInfo {
+	governors := readGlobValues("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor")
+	drivers := readGlobValues("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_driver")
+	available := readWords("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors")
+	current := readGlobKilohertz("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq")
+	minimum := readKilohertz("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq")
+	maximum := readKilohertz("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+	return PowerInfo{
+		Governor:              joinedState(governors),
+		AvailableGovernors:    available,
+		Driver:                joinedState(drivers),
+		CurrentFrequencyMHz:   average(current),
+		MinimumFrequencyMHz:   minimum,
+		MaximumFrequencyMHz:   maximum,
+		PlatformProfile:       readTrimmed("/sys/firmware/acpi/platform_profile"),
+		AvailableProfiles:     readWords("/sys/firmware/acpi/platform_profile_choices"),
+		ControlSupported:      false,
+		ControlDisabledReason: "Read-only detection is enabled; safe profile switching requires a validated privileged helper and rollback.",
+	}
+}
+
+func readGlobValues(pattern string) []string {
+	paths, _ := filepath.Glob(pattern)
+	values := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if value := readTrimmed(path); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func joinedState(values []string) string {
+	if len(values) == 0 {
+		return "unavailable"
+	}
+	first := values[0]
+	for _, value := range values[1:] {
+		if value != first {
+			return "mixed"
+		}
+	}
+	return first
+}
+
+func readWords(path string) []string {
+	value := readTrimmed(path)
+	if value == "" {
+		return []string{}
+	}
+	return strings.Fields(value)
+}
+
+func readGlobKilohertz(pattern string) []float64 {
+	paths, _ := filepath.Glob(pattern)
+	values := make([]float64, 0, len(paths))
+	for _, path := range paths {
+		if value := readKilohertz(path); value > 0 {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func readKilohertz(path string) float64 {
+	kilohertz, _ := strconv.ParseFloat(readTrimmed(path), 64)
+	return kilohertz / 1000
+}
+
+func average(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, value := range values {
+		sum += value
+	}
+	return sum / float64(len(values))
+}
+
+func readTrimmed(path string) string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(content))
 }

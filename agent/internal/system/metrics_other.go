@@ -24,9 +24,17 @@ func ReadMetrics() (Metrics, error) {
 			CPUCores:     runtime.NumCPU(),
 			CPUThreads:   runtime.NumCPU(),
 		},
-		MemoryTotalBytes:  memory.Sys,
-		MemoryUsedBytes:   memory.Alloc,
-		Temperatures:      []Temperature{},
+		MemoryTotalBytes: memory.Sys,
+		MemoryUsedBytes:  memory.Alloc,
+		Temperatures:     []Temperature{},
+		Fans:             []Fan{},
+		Power: PowerInfo{
+			Governor:              "unavailable",
+			Driver:                "unavailable",
+			AvailableGovernors:    []string{},
+			AvailableProfiles:     []string{},
+			ControlDisabledReason: "Power telemetry is available on Linux only.",
+		},
 		CollectionWarning: "Full host telemetry is available on Linux only.",
 	}, nil
 }

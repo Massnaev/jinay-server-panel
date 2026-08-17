@@ -40,3 +40,25 @@ core id : 1`
 		t.Fatalf("unexpected topology: sockets=%d cores=%d", info.CPUSockets, info.CPUCores)
 	}
 }
+
+func TestParseMemoryAndSwap(t *testing.T) {
+	info := parseMemoryInfo("MemTotal: 32768 kB\nMemAvailable: 24576 kB\nSwapTotal: 8192 kB\nSwapFree: 6144 kB\n")
+	if info.Total != 32768*1024 || info.Used != 8192*1024 {
+		t.Fatalf("unexpected memory values: %+v", info)
+	}
+	if info.SwapTotal != 8192*1024 || info.SwapUsed != 2048*1024 {
+		t.Fatalf("unexpected swap values: %+v", info)
+	}
+}
+
+func TestPowerValueSummary(t *testing.T) {
+	if got := joinedState([]string{"schedutil", "schedutil"}); got != "schedutil" {
+		t.Fatalf("unexpected governor %q", got)
+	}
+	if got := joinedState([]string{"powersave", "performance"}); got != "mixed" {
+		t.Fatalf("expected mixed state, got %q", got)
+	}
+	if got := average([]float64{1200, 2400, 3600}); got != 2400 {
+		t.Fatalf("unexpected average %f", got)
+	}
+}

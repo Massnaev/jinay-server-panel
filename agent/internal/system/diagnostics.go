@@ -29,6 +29,9 @@ func Diagnose(ctx context.Context, docker Docker) ([]Finding, error) {
 	if usage["memoryPercent"] >= 90 {
 		findings = append(findings, Finding{ID: "memory-pressure", Severity: "critical", Title: "Memory pressure", Detail: "Available memory is below 10%.", Recommendation: "Find the largest consumers and verify swap and OOM events.", DetectedAt: now})
 	}
+	if metrics.SwapTotalBytes > 0 && usage["swapPercent"] >= 70 {
+		findings = append(findings, Finding{ID: "swap-pressure", Severity: "warning", Title: "Swap usage is high", Detail: "Swap usage is at or above 70%.", Recommendation: "Inspect memory pressure and long-lived processes before changing swap configuration.", DetectedAt: now})
+	}
 	if usage["diskPercent"] >= 85 {
 		findings = append(findings, Finding{ID: "disk-capacity", Severity: "warning", Title: "Disk space is running low", Detail: "Root filesystem usage is above 85%.", Recommendation: "Review container images, logs and backups before removing data.", DetectedAt: now})
 	}
