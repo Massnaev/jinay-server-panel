@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.22.x
+          cache: false
+
+      - name: Install web dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Lint web application
+        run: npm run lint
+
+      - name: Test static web build
+        run: npm test
+
+      - name: Test local agent
+        working-directory: agent
+        run: go test ./...
