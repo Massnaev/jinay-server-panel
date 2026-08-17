@@ -151,7 +151,7 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"metrics": metrics, "usage": system.UsageSummary(metrics)})
+	writeJSON(w, http.StatusOK, map[string]any{"metrics": metrics, "usage": system.UsageSummary(metrics), "agentVersion": s.config.Version})
 }
 
 func (s *Server) containers(w http.ResponseWriter, r *http.Request) {

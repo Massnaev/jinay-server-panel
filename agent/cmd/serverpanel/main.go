@@ -21,6 +21,7 @@ var version = "0.1.0-dev"
 
 func main() {
 	cfg := config.FromEnv()
+	cfg.Version = version
 	command := "serve"
 	if len(os.Args) > 1 {
 		command = os.Args[1]
@@ -59,7 +60,7 @@ func serve(cfg config.Config) error {
 		Addr: cfg.Listen, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second,
 	}
-	log.Printf("ServerPanel agent %s listening at %s", version, api.ListenAddress(cfg))
+	log.Printf("Jinay agent %s listening at %s", version, api.ListenAddress(cfg))
 	return httpServer.ListenAndServe()
 }
 

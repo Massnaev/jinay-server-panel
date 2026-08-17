@@ -26,7 +26,7 @@ func testServer(t *testing.T) *Server {
 	if err := users.Add("admin", "admin", "correct horse battery staple"); err != nil {
 		t.Fatal(err)
 	}
-	return New(config.Config{SecureCookies: false, DataDir: directory, SessionTTL: time.Hour}, users, audit.New(filepath.Join(directory, "audit.jsonl")))
+	return New(config.Config{Version: "test-version", SecureCookies: false, DataDir: directory, SessionTTL: time.Hour}, users, audit.New(filepath.Join(directory, "audit.jsonl")))
 }
 
 func TestProtectedRouteNeedsAuthentication(t *testing.T) {
@@ -105,5 +105,22 @@ func TestLoginSessionAndCSRF(t *testing.T) {
 	server.Handler().ServeHTTP(actionResponse, action)
 	if actionResponse.Code != http.StatusForbidden {
 		t.Fatalf("disabled Docker action should be forbidden, got %d", actionResponse.Code)
+	}
+
+	metricsRequest := httptest.NewRequest(http.MethodGet, "/api/metrics", nil)
+	metricsRequest.AddCookie(cookies[0])
+	metricsResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(metricsResponse, metricsRequest)
+	if metricsResponse.Code != http.StatusOK {
+		t.Fatalf("expected metrics response, got %d: %s", metricsResponse.Code, metricsResponse.Body.String())
+	}
+	var metricsBody struct {
+		AgentVersion string `json:"agentVersion"`
+	}
+	if err := json.Unmarshal(metricsResponse.Body.Bytes(), &metricsBody); err != nil {
+		t.Fatal(err)
+	}
+	if metricsBody.AgentVersion != "test-version" {
+		t.Fatalf("expected synchronized agent version, got %q", metricsBody.AgentVersion)
 	}
 }

@@ -8,6 +8,7 @@ import (
 )
 
 type Config struct {
+	Version             string
 	Listen              string
 	DataDir             string
 	WebRoot             string
@@ -18,6 +19,7 @@ type Config struct {
 
 func FromEnv() Config {
 	return Config{
+		Version:             "dev",
 		Listen:              env("SERVERPANEL_LISTEN", "127.0.0.1:9080"),
 		DataDir:             env("SERVERPANEL_DATA_DIR", filepath.Join(".", "data")),
 		WebRoot:             env("SERVERPANEL_WEB_ROOT", filepath.Join(".", "web")),

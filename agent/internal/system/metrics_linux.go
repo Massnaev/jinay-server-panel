@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -85,6 +86,7 @@ func readSystemInfo() SystemInfo {
 		info.CPUModel = parsed.CPUModel
 		info.CPUSockets = parsed.CPUSockets
 		info.CPUCores = parsed.CPUCores
+		info.Processors = parsed.Processors
 	}
 	if info.CPUSockets == 0 {
 		info.CPUSockets = 1
@@ -96,6 +98,7 @@ func readSystemInfo() SystemInfo {
 		kilohertz, _ := strconv.ParseFloat(strings.TrimSpace(string(content)), 64)
 		info.CPUMaxFrequencyMHz = kilohertz / 1000
 	}
+	info.GPUs = readGPUs()
 	return info
 }
 
@@ -111,8 +114,13 @@ func parseOSRelease(content string) string {
 
 func parseCPUInfo(content string) SystemInfo {
 	info := SystemInfo{}
-	sockets := make(map[string]struct{})
-	cores := make(map[string]struct{})
+	type socketData struct {
+		model   string
+		cores   map[string]struct{}
+		threads int
+	}
+	sockets := make(map[string]*socketData)
+	fallbackSocket := "0"
 	for _, block := range strings.Split(strings.TrimSpace(content), "\n\n") {
 		values := make(map[string]string)
 		for _, line := range strings.Split(block, "\n") {
@@ -124,17 +132,138 @@ func parseCPUInfo(content string) SystemInfo {
 		if info.CPUModel == "" {
 			info.CPUModel = values["model name"]
 		}
-		physicalID, coreID := values["physical id"], values["core id"]
-		if physicalID != "" {
-			sockets[physicalID] = struct{}{}
-			if coreID != "" {
-				cores[physicalID+":"+coreID] = struct{}{}
-			}
+		physicalID := values["physical id"]
+		if physicalID == "" {
+			physicalID = fallbackSocket
+		}
+		socket := sockets[physicalID]
+		if socket == nil {
+			socket = &socketData{model: values["model name"], cores: make(map[string]struct{})}
+			sockets[physicalID] = socket
+		}
+		socket.threads++
+		if coreID := values["core id"]; coreID != "" {
+			socket.cores[coreID] = struct{}{}
 		}
 	}
 	info.CPUSockets = len(sockets)
-	info.CPUCores = len(cores)
+	ids := make([]string, 0, len(sockets))
+	for id := range sockets {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		left, leftErr := strconv.Atoi(ids[i])
+		right, rightErr := strconv.Atoi(ids[j])
+		if leftErr == nil && rightErr == nil {
+			return left < right
+		}
+		return ids[i] < ids[j]
+	})
+	for _, id := range ids {
+		socket := sockets[id]
+		coreCount := len(socket.cores)
+		if coreCount == 0 {
+			coreCount = socket.threads
+		}
+		info.CPUCores += coreCount
+		info.Processors = append(info.Processors, ProcessorInfo{
+			SocketID: id, Model: socket.model, PhysicalCores: coreCount, LogicalThreads: socket.threads,
+		})
+	}
 	return info
+}
+
+func readGPUs() []GPUInfo {
+	paths, _ := filepath.Glob("/sys/class/drm/card[0-9]*/device/uevent")
+	gpus := make([]GPUInfo, 0, len(paths))
+	for _, path := range paths {
+		values := parseKeyValues(readTrimmed(path))
+		pciID := strings.SplitN(values["PCI_ID"], ":", 2)
+		if len(pciID) != 2 {
+			continue
+		}
+		vendorID, deviceID := strings.ToLower(pciID[0]), strings.ToLower(pciID[1])
+		vendor := pciVendorName(vendorID)
+		model := lookupPCIDevice(vendorID, deviceID)
+		if model == "" {
+			model = fmt.Sprintf("%s GPU [%s:%s]", vendor, vendorID, deviceID)
+		}
+		gpus = append(gpus, GPUInfo{
+			Card: filepath.Base(filepath.Dir(filepath.Dir(path))), Model: model, Vendor: vendor,
+			VendorID: vendorID, DeviceID: deviceID, PCISlot: values["PCI_SLOT_NAME"], Driver: values["DRIVER"],
+			TemperatureCelsius: readGPUTemperature(filepath.Dir(path)),
+		})
+	}
+	sort.Slice(gpus, func(i, j int) bool { return gpus[i].Card < gpus[j].Card })
+	return gpus
+}
+
+func parseKeyValues(content string) map[string]string {
+	values := make(map[string]string)
+	for _, line := range strings.Split(content, "\n") {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			values[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		}
+	}
+	return values
+}
+
+func pciVendorName(id string) string {
+	switch strings.ToLower(id) {
+	case "10de":
+		return "NVIDIA"
+	case "1002", "1022":
+		return "AMD"
+	case "8086":
+		return "Intel"
+	default:
+		return "PCI"
+	}
+}
+
+func lookupPCIDevice(vendorID, deviceID string) string {
+	for _, path := range []string{"/usr/share/misc/pci.ids", "/usr/share/hwdata/pci.ids", "/usr/share/pci.ids"} {
+		content, err := os.ReadFile(path)
+		if err == nil {
+			return parsePCIDeviceName(string(content), vendorID, deviceID)
+		}
+	}
+	return ""
+}
+
+func parsePCIDeviceName(content, vendorID, deviceID string) string {
+	inVendor := false
+	for _, line := range strings.Split(content, "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !strings.HasPrefix(line, "\t") {
+			fields := strings.Fields(line)
+			inVendor = len(fields) >= 2 && strings.EqualFold(fields[0], vendorID)
+			continue
+		}
+		if !inVendor || strings.HasPrefix(line, "\t\t") {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		fields := strings.Fields(trimmed)
+		if len(fields) >= 2 && strings.EqualFold(fields[0], deviceID) {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
+		}
+	}
+	return ""
+}
+
+func readGPUTemperature(devicePath string) float64 {
+	paths, _ := filepath.Glob(filepath.Join(devicePath, "hwmon", "hwmon*", "temp*_input"))
+	for _, path := range paths {
+		milliCelsius, err := strconv.ParseFloat(readTrimmed(path), 64)
+		if err == nil && milliCelsius > 0 && milliCelsius <= 150_000 {
+			return milliCelsius / 1000
+		}
+	}
+	return 0
 }
 
 func readCPUTimes() (cpuTimes, error) {

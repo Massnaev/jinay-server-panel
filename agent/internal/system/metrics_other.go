@@ -23,6 +23,8 @@ func ReadMetrics() (Metrics, error) {
 			CPUSockets:   1,
 			CPUCores:     runtime.NumCPU(),
 			CPUThreads:   runtime.NumCPU(),
+			Processors:   []ProcessorInfo{{SocketID: "0", PhysicalCores: runtime.NumCPU(), LogicalThreads: runtime.NumCPU()}},
+			GPUs:         []GPUInfo{},
 		},
 		MemoryTotalBytes: memory.Sys,
 		MemoryUsedBytes:  memory.Alloc,

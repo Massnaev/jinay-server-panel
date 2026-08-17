@@ -31,15 +31,35 @@ type Network struct {
 	TransmittedBytes uint64 `json:"transmittedBytes"`
 }
 
+type ProcessorInfo struct {
+	SocketID       string `json:"socketId"`
+	Model          string `json:"model"`
+	PhysicalCores  int    `json:"physicalCores"`
+	LogicalThreads int    `json:"logicalThreads"`
+}
+
+type GPUInfo struct {
+	Card               string  `json:"card"`
+	Model              string  `json:"model"`
+	Vendor             string  `json:"vendor"`
+	VendorID           string  `json:"vendorId"`
+	DeviceID           string  `json:"deviceId"`
+	PCISlot            string  `json:"pciSlot"`
+	Driver             string  `json:"driver"`
+	TemperatureCelsius float64 `json:"temperatureCelsius,omitempty"`
+}
+
 type SystemInfo struct {
-	OSName             string  `json:"osName"`
-	KernelVersion      string  `json:"kernelVersion"`
-	Architecture       string  `json:"architecture"`
-	CPUModel           string  `json:"cpuModel"`
-	CPUSockets         int     `json:"cpuSockets"`
-	CPUCores           int     `json:"cpuCores"`
-	CPUThreads         int     `json:"cpuThreads"`
-	CPUMaxFrequencyMHz float64 `json:"cpuMaxFrequencyMHz"`
+	OSName             string          `json:"osName"`
+	KernelVersion      string          `json:"kernelVersion"`
+	Architecture       string          `json:"architecture"`
+	CPUModel           string          `json:"cpuModel"`
+	CPUSockets         int             `json:"cpuSockets"`
+	CPUCores           int             `json:"cpuCores"`
+	CPUThreads         int             `json:"cpuThreads"`
+	CPUMaxFrequencyMHz float64         `json:"cpuMaxFrequencyMHz"`
+	Processors         []ProcessorInfo `json:"processors"`
+	GPUs               []GPUInfo       `json:"gpus"`
 }
 
 type Metrics struct {
