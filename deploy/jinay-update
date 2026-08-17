@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository="${JINAY_REPOSITORY:-Massnaev/jinay-server-panel}"
+install_root="/opt/serverpanel"
+agent="${install_root}/current/bin/serverpanel-agent"
+installer="${install_root}/current/deploy/install.sh"
+
+fail() {
+  printf 'Jinay updater: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ "${EUID}" -eq 0 ]] || fail "must run as root"
+[[ "${repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "invalid repository name"
+[[ -x "${agent}" ]] || fail "installed agent is missing"
+[[ -r "${installer}" ]] || fail "trusted local installer is missing"
+
+latest_url="$(curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+  --output /dev/null --write-out '%{url_effective}' "https://github.com/${repository}/releases/latest")"
+latest_version="${latest_url##*/}"
+[[ "${latest_version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || fail "GitHub returned an invalid release tag"
+
+current_version="$(${agent} version)"
+if [[ "${current_version}" == "${latest_version}" ]]; then
+  printf 'Jinay %s is already current.\n' "${current_version}"
+  exit 0
+fi
+
+printf 'Updating Jinay from %s to %s...\n' "${current_version}" "${latest_version}"
+SERVERPANEL_REPOSITORY="${repository}" \
+SERVERPANEL_VERSION="${latest_version}" \
+SERVERPANEL_TAILSCALE_SERVE=off \
+SERVERPANEL_AUTO_UPDATE=on \
+  bash "${installer}"

@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ServerPanel release installer for Ubuntu 24.04 and 26.04 LTS.
+# Jinay release installer for Ubuntu 24.04 and 26.04 LTS.
 # A release archive contains the agent, exported web assets, and systemd unit.
 # Secrets are generated on the target host only.
 
-repository="${SERVERPANEL_REPOSITORY:-Massnaev/serverpanel}"
+repository="${SERVERPANEL_REPOSITORY:-Massnaev/jinay-server-panel}"
 version="${SERVERPANEL_VERSION:-latest}"
 install_root="/opt/serverpanel"
 data_dir="/var/lib/serverpanel"
 config_dir="/etc/serverpanel"
 service_user="serverpanel"
 tailscale_mode="${SERVERPANEL_TAILSCALE_SERVE:-auto}"
+auto_update_mode="${SERVERPANEL_AUTO_UPDATE:-off}"
 
 fail() {
-  printf 'ServerPanel installer: %s\n' "$1" >&2
+  printf 'Jinay installer: %s\n' "$1" >&2
   exit 1
 }
 
 [[ "${EUID}" -eq 0 ]] || fail "run this installer as root (use sudo)"
 [[ "${repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "invalid GitHub repository name"
 [[ "${tailscale_mode}" == "auto" || "${tailscale_mode}" == "off" ]] || fail "SERVERPANEL_TAILSCALE_SERVE must be auto or off"
+[[ "${auto_update_mode}" == "on" || "${auto_update_mode}" == "off" ]] || fail "SERVERPANEL_AUTO_UPDATE must be on or off"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 command -v systemctl >/dev/null 2>&1 || fail "systemd is required"
@@ -34,8 +36,12 @@ esac
 
 asset="serverpanel-linux-${architecture}.tar.gz"
 if [[ "${version}" == "latest" ]]; then
-  base_url="https://github.com/${repository}/releases/latest/download"
-  release_id="latest-$(date -u +%Y%m%d%H%M%S)"
+  latest_url="$(curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+    --output /dev/null --write-out '%{url_effective}' "https://github.com/${repository}/releases/latest")"
+  version="${latest_url##*/}"
+  [[ "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || fail "GitHub returned an invalid release tag"
+  base_url="https://github.com/${repository}/releases/download/${version}"
+  release_id="${version}"
 else
   [[ "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || fail "invalid release version"
   base_url="https://github.com/${repository}/releases/download/${version}"
@@ -45,7 +51,7 @@ fi
 temporary_dir="$(mktemp -d)"
 trap 'rm -rf -- "${temporary_dir}"' EXIT
 
-printf 'Downloading ServerPanel %s for %s...\n' "${version}" "${architecture}"
+printf 'Downloading Jinay %s for %s...\n' "${version}" "${architecture}"
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
   "${base_url}/${asset}" -o "${temporary_dir}/${asset}"
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
@@ -66,6 +72,10 @@ tar --extract --gzip --file "${temporary_dir}/${asset}" --directory "${release_d
 
 [[ -x "${release_dir}/bin/serverpanel-agent" ]] || fail "release is missing bin/serverpanel-agent"
 [[ -f "${release_dir}/deploy/serverpanel-agent.service" ]] || fail "release is missing the agent systemd unit"
+[[ -x "${release_dir}/deploy/jinay-update" ]] || fail "release is missing the verified updater"
+[[ -f "${release_dir}/deploy/jinay-update.service" ]] || fail "release is missing the updater systemd unit"
+[[ -f "${release_dir}/deploy/jinay-update.timer" ]] || fail "release is missing the updater timer"
+[[ -r "${release_dir}/deploy/install.sh" ]] || fail "release is missing the trusted installer"
 [[ -f "${release_dir}/web/index.html" ]] || fail "release is missing the exported web interface"
 
 if ! id "${service_user}" >/dev/null 2>&1; then
@@ -90,6 +100,8 @@ fi
 
 ln -sfn "${release_dir}" "${install_root}/current"
 install -m 0644 "${release_dir}/deploy/serverpanel-agent.service" /etc/systemd/system/serverpanel-agent.service
+install -m 0644 "${release_dir}/deploy/jinay-update.service" /etc/systemd/system/jinay-update.service
+install -m 0644 "${release_dir}/deploy/jinay-update.timer" /etc/systemd/system/jinay-update.timer
 if systemctl list-unit-files serverpanel-web.service --no-legend 2>/dev/null | grep -q '^serverpanel-web.service'; then
   systemctl disable --now serverpanel-web.service >/dev/null 2>&1 || true
 fi
@@ -105,6 +117,9 @@ fi
 systemctl daemon-reload
 systemctl enable --now serverpanel-agent.service
 systemctl restart serverpanel-agent.service
+if [[ "${auto_update_mode}" == "on" ]]; then
+  systemctl enable --now jinay-update.timer
+fi
 
 panel_url="http://127.0.0.1:9080"
 tailscale_message=""
@@ -119,7 +134,7 @@ if [[ "${tailscale_mode}" == "auto" ]] && command -v tailscale >/dev/null 2>&1; 
   fi
 fi
 
-printf '\nServerPanel installation completed.\n'
+printf '\nJinay installation completed.\n'
 if [[ -n "${initial_password}" ]]; then
   printf '\nInitial account (shown once):\n'
   printf '  login: admin\n'
@@ -127,6 +142,12 @@ if [[ -n "${initial_password}" ]]; then
   printf 'Store it in a password manager and replace it after first sign-in.\n'
 else
   printf '\nExisting accounts were preserved; passwords cannot be recovered from their hashes.\n'
+fi
+if systemctl is-enabled --quiet jinay-update.timer 2>/dev/null; then
+  printf '\nAutomatic release updates: enabled\n'
+else
+  printf '\nAutomatic release updates: disabled\n'
+  printf 'Enable later: sudo systemctl enable --now jinay-update.timer\n'
 fi
 printf '\nPanel URL:\n  %s\n' "${panel_url}"
 if [[ -n "${tailscale_message}" ]]; then

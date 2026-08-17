@@ -9,6 +9,7 @@
 - [x] Session cookies, CSRF protection, login rate limiting and audit log
 - [x] Ubuntu 24.04/26.04 LTS systemd unit and static same-origin interface
 - [x] Versioned release assets, SHA-256 verification and repeatable installer
+- [x] Opt-in daily updates from verified GitHub Releases
 
 ## Phase 1 — useful server operations
 

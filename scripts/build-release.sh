@@ -39,6 +39,10 @@ mkdir -p "${stage}/bin" "${stage}/web" "${stage}/deploy"
 )
 
 install -m 0644 deploy/serverpanel-agent.service "${stage}/deploy/serverpanel-agent.service"
+install -m 0644 deploy/jinay-update.service "${stage}/deploy/jinay-update.service"
+install -m 0644 deploy/jinay-update.timer "${stage}/deploy/jinay-update.timer"
+install -m 0755 deploy/jinay-update "${stage}/deploy/jinay-update"
+install -m 0755 install.sh "${stage}/deploy/install.sh"
 cp -R dist/client/. "${stage}/web/"
 
 mkdir -p "${output_dir}"

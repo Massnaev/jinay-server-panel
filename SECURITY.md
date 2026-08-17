@@ -16,8 +16,11 @@ ServerPanel is a privileged administration surface. A flaw can affect the entire
 10. Hardware controls are unavailable until the exact platform is detected and tested.
 11. The Go router serves only typed API routes and an explicit static-file path allowlist.
 12. Automatic Tailscale setup uses Serve only; the installer never enables public Funnel exposure.
+13. Automatic updates are opt-in, follow published releases only, verify the release SHA-256, and invoke the installer bundled in the already verified local release.
 
 The production host serves prebuilt static assets; Node.js, Vite and Vinext are build-time dependencies only. The Go agent retains `MemoryDenyWriteExecute=true`.
+
+The optional `jinay-update.timer` runs as root because installing a system release requires writing under `/opt` and restarting the agent. Its service has a fixed executable path and repository, accepts no browser input, and does not pipe a newly downloaded script into a shell. It is disabled unless the operator explicitly enables it. A compromised GitHub release remains a supply-chain risk until signed artifacts are implemented.
 
 ## Deployment baseline
 

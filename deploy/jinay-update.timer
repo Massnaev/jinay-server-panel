@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for a verified Jinay release daily
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1d
+RandomizedDelaySec=2h
+Persistent=true
+Unit=jinay-update.service
+
+[Install]
+WantedBy=timers.target

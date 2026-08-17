@@ -16,6 +16,12 @@ Read-only hardware telemetry includes swap, CPU frequency policy, ACPI platform-
 
 The browser calls the agent through the same origin, so there is no generic application proxy. The Go router exposes only the documented API and a public-file allowlist (`/`, `/assets/*`, and `/favicon.svg`). An external Caddy, Nginx, or Tailscale HTTPS edge terminates TLS and forwards traffic to the loopback agent.
 
+### Optional release updater
+
+The opt-in `jinay-update.timer` checks GitHub once per day with randomized delay. It compares the latest published release tag with the version embedded in the running agent. When they differ, a root-only service invokes the installer bundled in the currently verified local release; that installer downloads the versioned archive and verifies its published SHA-256 before switching the `current` symlink. Commits on `main` are never installed automatically.
+
+This is a privileged host boundary. The updater has no HTTP route and receives no browser-supplied command, URL, repository or version. Automatic update remains disabled by default; signed artifacts and stronger provenance verification remain roadmap work.
+
 ### Codex bridge (future)
 
 Codex runs under a dedicated Linux account and communicates through its App Server over a Unix socket or authenticated loopback. ServerPanel translates a small, typed set of UI intents into App Server calls. The browser cannot choose arbitrary tool permissions or bypass approval policy.
@@ -30,6 +36,7 @@ OpenAI authentication is owned by Codex using `codex login` or device-code login
 | Browser session to agent | Request headers/body | Loopback agent | Typed routes, 64 KiB JSON limit, session, CSRF and roles |
 | Browser session to action | User input | Agent operation | Session, role, CSRF, reauth |
 | Agent to host | Typed action | OS/Docker | Allowlist, no shell, timeout |
+| Release updater to host | Published GitHub release | Root filesystem and systemd | Opt-in timer, fixed local script, version validation, SHA-256 |
 | Panel to Codex | Prompt/tool request | Codex workspace | Sandbox, approvals, budgets |
 | Codex to secrets | Agent process | Credential store | Dedicated account, file modes |
 
