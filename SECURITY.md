@@ -15,6 +15,7 @@ ServerPanel is a privileged administration surface. A flaw can affect the entire
 9. Destructive operations require confirmation and recent reauthentication.
 10. Hardware controls are unavailable until the exact platform is detected and tested.
 11. The Go router serves only typed API routes and an explicit static-file path allowlist.
+12. Automatic Tailscale setup uses Serve only; the installer never enables public Funnel exposure.
 
 The production host serves prebuilt static assets; Node.js, Vite and Vinext are build-time dependencies only. The Go agent retains `MemoryDenyWriteExecute=true`.
 

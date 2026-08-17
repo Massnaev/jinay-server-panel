@@ -21,10 +21,10 @@ Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS ser
 ```text
 Browser -> Tailscale HTTPS / reverse proxy -> local agent (loopback only)
                                              +-> static web interface
-                                      +-> /proc and /sys telemetry
-                                      +-> allowlisted Docker actions
-                                      +-> audit log
-                                      +-> Codex App Server bridge (future)
+                                             +-> /proc and /sys telemetry
+                                             +-> allowlisted Docker actions
+                                             +-> audit log
+                                             +-> Codex App Server bridge (future)
 ```
 
 The browser never receives host credentials and never talks to Docker or Codex directly. The local agent does not expose a general shell endpoint.
@@ -64,15 +64,17 @@ The intended release flow is:
 curl -fsSL https://raw.githubusercontent.com/Massnaev/serverpanel/main/install.sh | sudo bash
 ```
 
-The installer verifies the published SHA-256 release checksum, binds the agent to loopback, creates the first administrator, and prints a one-time password. Do not use an installer copied from an issue or chat message. Release archives are produced on Ubuntu with `scripts/build-release.sh`; each archive contains the tested Linux agent and prebuilt static interface. Node.js is not installed or run on the managed server.
+The installer verifies the published SHA-256 release checksum, binds the agent to loopback, creates the first administrator, and prints the login, one-time password, and detected panel URL in the same terminal. Do not use an installer copied from an issue or chat message. Release archives are produced on Ubuntu with `scripts/build-release.sh`; each archive contains the tested Linux agent and prebuilt static interface. Node.js is not installed or run on the managed server.
 
-For private HTTPS access from devices in the same tailnet, enable Tailscale Serve after installation:
+When Tailscale is already installed, the installer attempts to enable private HTTPS automatically. Manual equivalent:
 
 ```bash
 sudo tailscale serve --bg --yes http://127.0.0.1:9080
 ```
 
 This does not enable Tailscale Funnel and does not publish the panel to the public internet. Keep the agent bound to loopback.
+
+If another Tailscale user cannot open the address, see [Tailscale access and device sharing](docs/TAILSCALE.md). The server must be in the same tailnet or explicitly shared with that user; normal Tailscale connectivity alone does not grant access.
 
 ## Secrets
 

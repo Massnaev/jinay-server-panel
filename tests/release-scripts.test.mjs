@@ -12,6 +12,11 @@ test("installer keeps the MVP services private and privileged actions disabled",
   assert.match(installer, /install -d -m 0755 "\$\{install_root\}"/);
   assert.match(installer, /install -d -m 0700 "\$\{data_dir\}"/);
   assert.match(installer, /chmod 0755 "\$\{install_root\}" "\$\{install_root\}\/releases"/);
+  assert.match(installer, /tailscale serve --bg --yes http:\/\/127\.0\.0\.1:9080/);
+  assert.match(installer, /Panel URL:/);
+  assert.match(installer, /Initial account \(shown once\):/);
+  assert.match(installer, /password: %s/);
+  assert.doesNotMatch(installer, /tailscale funnel/);
   assert.doesNotMatch(installer, /OWNER\/serverpanel/);
 });
 

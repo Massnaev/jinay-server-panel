@@ -11,6 +11,7 @@ install_root="/opt/serverpanel"
 data_dir="/var/lib/serverpanel"
 config_dir="/etc/serverpanel"
 service_user="serverpanel"
+tailscale_mode="${SERVERPANEL_TAILSCALE_SERVE:-auto}"
 
 fail() {
   printf 'ServerPanel installer: %s\n' "$1" >&2
@@ -19,6 +20,7 @@ fail() {
 
 [[ "${EUID}" -eq 0 ]] || fail "run this installer as root (use sudo)"
 [[ "${repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "invalid GitHub repository name"
+[[ "${tailscale_mode}" == "auto" || "${tailscale_mode}" == "off" ]] || fail "SERVERPANEL_TAILSCALE_SERVE must be auto or off"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 command -v systemctl >/dev/null 2>&1 || fail "systemd is required"
@@ -104,12 +106,36 @@ systemctl daemon-reload
 systemctl enable --now serverpanel-agent.service
 systemctl restart serverpanel-agent.service
 
-printf '\nServerPanel is listening locally on http://127.0.0.1:9080\n'
-printf 'Use an SSH tunnel until HTTPS and the domain are configured:\n'
-printf '  ssh -L 3000:127.0.0.1:9080 user@server\n'
+panel_url="http://127.0.0.1:9080"
+tailscale_message=""
+if [[ "${tailscale_mode}" == "auto" ]] && command -v tailscale >/dev/null 2>&1; then
+  if tailscale_output="$(tailscale serve --bg --yes http://127.0.0.1:9080 2>&1)"; then
+    detected_url="$(tailscale serve status 2>/dev/null | sed -n 's#^\(https://[^[:space:]]*\).*#\1#p' | head -n 1)"
+    if [[ -n "${detected_url}" ]]; then
+      panel_url="${detected_url%/}/"
+    fi
+  else
+    tailscale_message="${tailscale_output}"
+  fi
+fi
+
+printf '\nServerPanel installation completed.\n'
 if [[ -n "${initial_password}" ]]; then
   printf '\nInitial account (shown once):\n'
   printf '  login: admin\n'
   printf '  password: %s\n' "${initial_password}"
   printf 'Store it in a password manager and replace it after first sign-in.\n'
+else
+  printf '\nExisting accounts were preserved; passwords cannot be recovered from their hashes.\n'
+fi
+printf '\nPanel URL:\n  %s\n' "${panel_url}"
+if [[ -n "${tailscale_message}" ]]; then
+  printf '\nTailscale Serve needs attention:\n%s\n' "${tailscale_message}"
+fi
+if [[ "${panel_url}" == http://127.0.0.1:* ]]; then
+  printf '\nSSH tunnel fallback:\n'
+  printf '  ssh -L 3000:127.0.0.1:9080 user@server\n'
+  printf 'Then open http://127.0.0.1:3000\n'
+else
+  printf 'This HTTPS address is private to authorized Tailscale users.\n'
 fi
