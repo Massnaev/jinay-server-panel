@@ -1,6 +1,6 @@
 # ServerPanel
 
-Open-source, self-hosted control panel for Ubuntu 24.04 servers. ServerPanel is being built for operators who want clear health monitoring and carefully constrained server controls without living in a terminal.
+Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS servers. ServerPanel is being built for operators who want clear health monitoring and carefully constrained server controls without living in a terminal.
 
 > [!IMPORTANT]
 > This repository is an early MVP. Keep it behind a VPN or an authenticated reverse proxy until the security checklist is complete. Never expose the agent, Docker socket, or Codex App Server directly to the internet.
@@ -14,7 +14,7 @@ Open-source, self-hosted control panel for Ubuntu 24.04 servers. ServerPanel is 
 - Health findings, audit history and recovery guidance
 - Power profiles shown as hardware-dependent capabilities
 - Codex integration boundary designed around localhost/Unix sockets and approvals
-- One-command Ubuntu installer (enabled after the first signed release)
+- One-command Ubuntu installer with verified release checksums
 
 ## Architecture
 
@@ -62,12 +62,10 @@ The current web preview uses realistic demo telemetry. The Ubuntu agent is devel
 The intended release flow is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/serverpanel/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Massnaev/serverpanel/main/install.sh | sudo bash
 ```
 
-`OWNER` remains a placeholder until the GitHub repository is created. The installer verifies the published SHA-256 release checksum, binds the agent to loopback, creates the first administrator, and prints a one-time password. Do not use an installer copied from an issue or chat message.
-
-Until the repository and its first release exist, the installer deliberately stops at the `OWNER` placeholder. Release archives are produced on Ubuntu with `scripts/build-release.sh`; the generated archive contains the tested web build and Linux agent.
+The installer verifies the published SHA-256 release checksum, binds both processes to loopback, creates the first administrator, and prints a one-time password. Do not use an installer copied from an issue or chat message. Release archives are produced on Ubuntu with `scripts/build-release.sh`; each archive contains the tested web build, Linux agent, and a checksum-verified Node.js runtime.
 
 ## Secrets
 

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OWNER/serverpanel/agent/internal/audit"
-	"github.com/OWNER/serverpanel/agent/internal/auth"
-	"github.com/OWNER/serverpanel/agent/internal/config"
+	"github.com/Massnaev/serverpanel/agent/internal/audit"
+	"github.com/Massnaev/serverpanel/agent/internal/auth"
+	"github.com/Massnaev/serverpanel/agent/internal/config"
 )
 
 func testServer(t *testing.T) *Server {

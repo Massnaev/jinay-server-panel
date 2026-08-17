@@ -1,3 +1,3 @@
-module github.com/OWNER/serverpanel/agent
+module github.com/Massnaev/serverpanel/agent
 
 go 1.22

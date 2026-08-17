@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWNER/serverpanel/agent/internal/api"
-	"github.com/OWNER/serverpanel/agent/internal/audit"
-	"github.com/OWNER/serverpanel/agent/internal/auth"
-	"github.com/OWNER/serverpanel/agent/internal/config"
+	"github.com/Massnaev/serverpanel/agent/internal/api"
+	"github.com/Massnaev/serverpanel/agent/internal/audit"
+	"github.com/Massnaev/serverpanel/agent/internal/auth"
+	"github.com/Massnaev/serverpanel/agent/internal/config"
 )
 
 const version = "0.1.0-dev"

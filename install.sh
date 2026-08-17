@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ServerPanel release installer for Ubuntu 24.04.
+# ServerPanel release installer for Ubuntu 24.04 and 26.04 LTS.
 # A release archive must contain bin/serverpanel-agent, bin/serverpanel-web,
 # and deploy/*.service. Secrets are generated on the target host only.
 
-repository="${SERVERPANEL_REPOSITORY:-OWNER/serverpanel}"
+repository="${SERVERPANEL_REPOSITORY:-Massnaev/serverpanel}"
 version="${SERVERPANEL_VERSION:-latest}"
 install_root="/opt/serverpanel"
 data_dir="/var/lib/serverpanel"
@@ -18,7 +18,6 @@ fail() {
 }
 
 [[ "${EUID}" -eq 0 ]] || fail "run this installer as root (use sudo)"
-[[ "${repository}" != OWNER/* ]] || fail "set SERVERPANEL_REPOSITORY=github-owner/repository until the public repository is created"
 [[ "${repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "invalid GitHub repository name"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
@@ -61,6 +60,7 @@ tar --extract --gzip --file "${temporary_dir}/${asset}" --directory "${release_d
 
 [[ -x "${release_dir}/bin/serverpanel-agent" ]] || fail "release is missing bin/serverpanel-agent"
 [[ -x "${release_dir}/bin/serverpanel-web" ]] || fail "release is missing bin/serverpanel-web"
+[[ -x "${release_dir}/runtime/bin/node" ]] || fail "release is missing its verified Node.js runtime"
 [[ -f "${release_dir}/deploy/serverpanel-agent.service" ]] || fail "release is missing the agent systemd unit"
 [[ -f "${release_dir}/deploy/serverpanel-web.service" ]] || fail "release is missing the web systemd unit"
 

@@ -5,4 +5,5 @@ release_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${release_root}/web"
 export HOST="${HOST:-127.0.0.1}"
 export PORT="${PORT:-3000}"
-exec "${release_root}/web/node_modules/.bin/vinext" start
+exec "${release_root}/runtime/bin/node" --jitless \
+  "${release_root}/web/node_modules/vinext/dist/cli.js" start
