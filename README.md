@@ -82,7 +82,11 @@ Each logical change should be committed separately. Security-sensitive changes n
 
 ## Donations
 
-Donation addresses will be added only after the project owner supplies and verifies them. No placeholder wallet is published.
+If ServerPanel is useful to you, you can support its development:
+
+- **USDT (TRC-20):** `TUz11JVX41hTXBUWbbRazmBRWhxBGkytqT`
+
+Always verify the network and address before sending funds. Cryptocurrency transfers cannot be reversed.
 
 ## License
 
