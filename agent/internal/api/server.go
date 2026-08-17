@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,7 @@ func New(cfg config.Config, users *auth.Store, auditLog *audit.Log) *Server {
 	mux.HandleFunc("POST /api/containers/{id}/{action}", server.containerAction)
 	mux.HandleFunc("GET /api/diagnostics", server.diagnostics)
 	mux.HandleFunc("GET /api/audit", server.auditEntries)
+	mux.HandleFunc("GET /", server.webUI)
 	server.handler = server.middleware(mux)
 	return server
 }
@@ -66,6 +68,18 @@ func (s *Server) Handler() http.Handler { return s.handler }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC()})
+}
+
+func (s *Server) webUI(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" && !strings.HasPrefix(r.URL.Path, "/assets/") && r.URL.Path != "/favicon.svg" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.URL.Path == "/" {
+		http.ServeFile(w, r, filepath.Join(s.config.WebRoot, "index.html"))
+		return
+	}
+	http.FileServer(http.Dir(s.config.WebRoot)).ServeHTTP(w, r)
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +282,11 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" {
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		} else {
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Cache-Control", "no-store")
 		}

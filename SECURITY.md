@@ -14,7 +14,9 @@ ServerPanel is a privileged administration surface. A flaw can affect the entire
 8. Codex App Server is never exposed directly to a shared or public network.
 9. Destructive operations require confirmation and recent reauthentication.
 10. Hardware controls are unavailable until the exact platform is detected and tested.
-11. The same-origin API gateway has a fixed loopback destination and an explicit method/path allowlist.
+11. The Go router serves only typed API routes and an explicit static-file path allowlist.
+
+The production host serves prebuilt static assets; Node.js, Vite and Vinext are build-time dependencies only. The Go agent retains `MemoryDenyWriteExecute=true`.
 
 ## Deployment baseline
 
@@ -22,7 +24,7 @@ ServerPanel is a privileged administration surface. A flaw can affect the entire
 - Firewall allowing only SSH and the HTTPS reverse proxy
 - Panel reachable through a VPN, mesh network, or IP allowlist during MVP
 - SSH keys only; disable password SSH login after recovery access is verified
-- Separate unprivileged service account for the web process
+- Separate unprivileged service account for the panel agent
 - Root-readable secret files with mode `0600`
 - Automated encrypted backups stored off-host
 - Login throttling, session expiry and MFA before broader internet exposure

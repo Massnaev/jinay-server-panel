@@ -19,9 +19,8 @@ Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS ser
 ## Architecture
 
 ```text
-Browser -> HTTPS reverse proxy -> ServerPanel web app
-                                  |
-                                  +-> local agent (loopback only)
+Browser -> Tailscale HTTPS / reverse proxy -> local agent (loopback only)
+                                             +-> static web interface
                                       +-> /proc and /sys telemetry
                                       +-> allowlisted Docker actions
                                       +-> audit log
@@ -65,7 +64,7 @@ The intended release flow is:
 curl -fsSL https://raw.githubusercontent.com/Massnaev/serverpanel/main/install.sh | sudo bash
 ```
 
-The installer verifies the published SHA-256 release checksum, binds both processes to loopback, creates the first administrator, and prints a one-time password. Do not use an installer copied from an issue or chat message. Release archives are produced on Ubuntu with `scripts/build-release.sh`; each archive contains the tested web build, Linux agent, and a checksum-verified Node.js runtime.
+The installer verifies the published SHA-256 release checksum, binds the agent to loopback, creates the first administrator, and prints a one-time password. Do not use an installer copied from an issue or chat message. Release archives are produced on Ubuntu with `scripts/build-release.sh`; each archive contains the tested Linux agent and prebuilt static interface. Node.js is not installed or run on the managed server.
 
 ## Secrets
 

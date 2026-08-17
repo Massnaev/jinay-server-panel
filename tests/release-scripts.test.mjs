@@ -7,7 +7,7 @@ test("installer keeps the MVP services private and privileged actions disabled",
   assert.match(installer, /Massnaev\/serverpanel/);
   assert.match(installer, /SERVERPANEL_LISTEN=127\.0\.0\.1:9080/);
   assert.match(installer, /SERVERPANEL_ENABLE_DOCKER_ACTIONS=false/);
-  assert.match(installer, /runtime\/bin\/node/);
+  assert.match(installer, /web\/index\.html/);
   assert.match(installer, /sha256sum --check --status/);
   assert.match(installer, /install -d -m 0755 "\$\{install_root\}"/);
   assert.match(installer, /install -d -m 0700 "\$\{data_dir\}"/);
@@ -15,15 +15,13 @@ test("installer keeps the MVP services private and privileged actions disabled",
   assert.doesNotMatch(installer, /OWNER\/serverpanel/);
 });
 
-test("release verifies and bundles its pinned Node runtime", async () => {
-  const [build, launcher] = await Promise.all([
+test("release exports a static interface and keeps Node off the server", async () => {
+  const [build, agentUnit] = await Promise.all([
     readFile(new URL("../scripts/build-release.sh", import.meta.url), "utf8"),
-    readFile(new URL("../deploy/serverpanel-web", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/serverpanel-agent.service", import.meta.url), "utf8"),
   ]);
-  assert.match(build, /node_version="\$\{SERVERPANEL_NODE_VERSION:-24\.18\.0\}"/);
   assert.match(build, /-X main\.version=\$\{release_version\}/);
-  assert.match(build, /SHASUMS256\.txt/);
-  assert.match(build, /sha256sum --check --status node\.sha256/);
-  assert.match(launcher, /runtime\/bin\/node/);
-  assert.match(launcher, /--jitless/);
+  assert.match(build, /cp -R dist\/client\/\./);
+  assert.doesNotMatch(build, /nodejs\.org|runtime\/bin\/node|node_modules.*stage/);
+  assert.match(agentUnit, /MemoryDenyWriteExecute=true/);
 });

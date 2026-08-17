@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # ServerPanel release installer for Ubuntu 24.04 and 26.04 LTS.
-# A release archive must contain bin/serverpanel-agent, bin/serverpanel-web,
-# and deploy/*.service. Secrets are generated on the target host only.
+# A release archive contains the agent, exported web assets, and systemd unit.
+# Secrets are generated on the target host only.
 
 repository="${SERVERPANEL_REPOSITORY:-Massnaev/serverpanel}"
 version="${SERVERPANEL_VERSION:-latest}"
@@ -63,10 +63,8 @@ chmod 0755 "${release_dir}"
 tar --extract --gzip --file "${temporary_dir}/${asset}" --directory "${release_dir}" --no-same-owner
 
 [[ -x "${release_dir}/bin/serverpanel-agent" ]] || fail "release is missing bin/serverpanel-agent"
-[[ -x "${release_dir}/bin/serverpanel-web" ]] || fail "release is missing bin/serverpanel-web"
-[[ -x "${release_dir}/runtime/bin/node" ]] || fail "release is missing its verified Node.js runtime"
 [[ -f "${release_dir}/deploy/serverpanel-agent.service" ]] || fail "release is missing the agent systemd unit"
-[[ -f "${release_dir}/deploy/serverpanel-web.service" ]] || fail "release is missing the web systemd unit"
+[[ -f "${release_dir}/web/index.html" ]] || fail "release is missing the exported web interface"
 
 if ! id "${service_user}" >/dev/null 2>&1; then
   useradd --system --home-dir "${data_dir}" --shell /usr/sbin/nologin "${service_user}"
@@ -79,14 +77,20 @@ if [[ ! -f "${config_dir}/serverpanel.env" ]]; then
   printf '%s\n' \
     'SERVERPANEL_LISTEN=127.0.0.1:9080' \
     'SERVERPANEL_DATA_DIR=/var/lib/serverpanel' \
+    'SERVERPANEL_WEB_ROOT=/opt/serverpanel/current/web' \
     'SERVERPANEL_SECURE_COOKIES=true' \
     'SERVERPANEL_ENABLE_DOCKER_ACTIONS=false' \
     > "${config_dir}/serverpanel.env"
 fi
+if ! grep -q '^SERVERPANEL_WEB_ROOT=' "${config_dir}/serverpanel.env"; then
+  printf '%s\n' 'SERVERPANEL_WEB_ROOT=/opt/serverpanel/current/web' >> "${config_dir}/serverpanel.env"
+fi
 
 ln -sfn "${release_dir}" "${install_root}/current"
 install -m 0644 "${release_dir}/deploy/serverpanel-agent.service" /etc/systemd/system/serverpanel-agent.service
-install -m 0644 "${release_dir}/deploy/serverpanel-web.service" /etc/systemd/system/serverpanel-web.service
+if systemctl list-unit-files serverpanel-web.service --no-legend 2>/dev/null | grep -q '^serverpanel-web.service'; then
+  systemctl disable --now serverpanel-web.service >/dev/null 2>&1 || true
+fi
 
 initial_password=""
 if [[ ! -s "${data_dir}/users.json" ]]; then
@@ -97,12 +101,12 @@ if [[ ! -s "${data_dir}/users.json" ]]; then
 fi
 
 systemctl daemon-reload
-systemctl enable --now serverpanel-agent.service serverpanel-web.service
-systemctl restart serverpanel-agent.service serverpanel-web.service
+systemctl enable --now serverpanel-agent.service
+systemctl restart serverpanel-agent.service
 
-printf '\nServerPanel is listening locally on http://127.0.0.1:3000\n'
+printf '\nServerPanel is listening locally on http://127.0.0.1:9080\n'
 printf 'Use an SSH tunnel until HTTPS and the domain are configured:\n'
-printf '  ssh -L 3000:127.0.0.1:3000 user@server\n'
+printf '  ssh -L 3000:127.0.0.1:9080 user@server\n'
 if [[ -n "${initial_password}" ]]; then
   printf '\nInitial account (shown once):\n'
   printf '  login: admin\n'

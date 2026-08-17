@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +36,37 @@ func TestProtectedRouteNeedsAuthentication(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", response.Code)
+	}
+}
+
+func TestWebUIOnlyServesExportedPublicFiles(t *testing.T) {
+	directory := t.TempDir()
+	webRoot := filepath.Join(directory, "web")
+	if err := os.MkdirAll(filepath.Join(webRoot, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webRoot, "index.html"), []byte("<!doctype html><title>ServerPanel</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	users, err := auth.Open(filepath.Join(directory, "users.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := New(config.Config{WebRoot: webRoot, DataDir: directory, SessionTTL: time.Hour}, users, audit.New(filepath.Join(directory, "audit.jsonl")))
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("ServerPanel")) {
+		t.Fatalf("expected exported UI, got %d: %s", response.Code, response.Body.String())
+	}
+	if csp := response.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "connect-src 'self'") {
+		t.Fatalf("expected UI CSP, got %q", csp)
+	}
+
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/private.txt", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("unexpected file path should be 404, got %d", response.Code)
 	}
 }
 

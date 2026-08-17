@@ -2,19 +2,17 @@
 
 ## Components
 
-### Web application
+### Static web application
 
-The web application owns presentation, navigation and the browser session boundary. It talks only to the ServerPanel API through the same HTTPS origin. It never receives Docker socket access, host SSH keys, Codex tokens, or provider API keys.
+The React interface is exported to static HTML, CSS and JavaScript during the trusted release build. The Go agent serves those immutable files and the typed API from one loopback origin. No Node.js application server runs on the managed host. The browser never receives Docker socket access, host SSH keys, Codex tokens, or provider API keys.
 
 ### Local agent
 
 The agent is the only component allowed to inspect host telemetry or request an operational action. It listens on loopback or a Unix socket, validates the session and CSRF token, checks the caller role, validates typed parameters, executes a fixed command, and appends an audit event.
 
-### Same-origin API gateway
+### Same-origin API
 
-The web process exposes a same-origin `/api` gateway with a fixed loopback upstream. It forwards only the documented method/path combinations, a bounded request body, and the cookie, content-type, and CSRF headers. It cannot select a hostname or proxy an arbitrary path. The agent port is not opened by the firewall.
-
-An external Caddy, Nginx, or Tailscale HTTPS edge terminates TLS and forwards browser traffic only to the loopback web process.
+The browser calls the agent through the same origin, so there is no generic application proxy. The Go router exposes only the documented API and a public-file allowlist (`/`, `/assets/*`, and `/favicon.svg`). An external Caddy, Nginx, or Tailscale HTTPS edge terminates TLS and forwards traffic to the loopback agent.
 
 ### Codex bridge (future)
 
@@ -26,8 +24,8 @@ OpenAI authentication is owned by Codex using `codex login` or device-code login
 
 | Boundary | Untrusted side | Trusted side | Required control |
 | --- | --- | --- | --- |
-| Internet to web | Browser/network | TLS edge | TLS, rate limits, allowlist/VPN |
-| Web to agent | Request headers/body | Loopback agent | Fixed upstream, route allowlist, header sanitation, 64 KiB limit |
+| Internet to agent | Browser/network | TLS edge | TLS, rate limits, allowlist/VPN |
+| Browser session to agent | Request headers/body | Loopback agent | Typed routes, 64 KiB JSON limit, session, CSRF and roles |
 | Browser session to action | User input | Agent operation | Session, role, CSRF, reauth |
 | Agent to host | Typed action | OS/Docker | Allowlist, no shell, timeout |
 | Panel to Codex | Prompt/tool request | Codex workspace | Sandbox, approvals, budgets |
