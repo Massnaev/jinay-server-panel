@@ -43,6 +43,20 @@ npm run dev
 
 The current web preview uses realistic demo telemetry. The Ubuntu agent is developed in `agent/` and will replace demo data when connected.
 
+## Interface preview
+
+### Server overview
+
+![Server overview dashboard](docs/screenshots/overview-desktop.png)
+
+### Docker containers
+
+![Docker container management](docs/screenshots/containers-desktop.png)
+
+### Mobile layout
+
+![Mobile server overview](docs/screenshots/overview-mobile.png)
+
 ## Installation
 
 The intended release flow is:
