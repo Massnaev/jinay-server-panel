@@ -44,8 +44,15 @@ test("keeps the MVP security and accessibility boundaries visible in source", as
   assert.match(page, /receiveBytesPerSecond/);
   assert.match(page, /Сеть сейчас/);
   assert.match(page, /Видеокарты/);
+  assert.match(page, /\/history\?range=/);
+  assert.match(page, /История нагрузки/);
+  assert.match(page, /1 час/);
+  assert.match(page, /24 часа/);
+  assert.match(page, /storageDevices/);
+  assert.match(page, /Физические диски/);
+  assert.match(page, /Почему нет SMART/);
   assert.match(page, /Диагностика ничего не меняет/);
-  assert.doesNotMatch(page, /\/api\/power|\/api\/fans/);
+  assert.doesNotMatch(page, /\/api\/power|\/api\/fans|\/api\/storage/);
   assert.match(page, /process\.env\.NODE_ENV === "development"/);
   assert.doesNotMatch(exportedHtml, /\.vinext\/fonts|[A-Z]:\\/i);
   assert.match(exportedHtml, /\/assets\//);

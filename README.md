@@ -8,8 +8,9 @@ Publicly developed, self-hosted control panel for Ubuntu 24.04 and 26.04 LTS ser
 ## First milestone
 
 - Responsive dark operations dashboard
-- CPU, memory, disk, load and temperature telemetry
+- CPU, memory, disk, load and temperature telemetry with protected 1-hour and 24-hour history
 - Physical CPU socket topology with per-socket load and automatic DRM/PCI GPU detection
+- Physical disk inventory with models, media types, mount usage and available temperature sensors
 - Live inbound and outbound network speed
 - Local username/password authentication created from Ubuntu
 - Docker inventory with opt-in start, stop and restart actions

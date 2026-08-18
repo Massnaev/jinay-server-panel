@@ -2,8 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-type Tab = "overview" | "hardware" | "containers" | "diagnostics" | "audit";
+type Tab = "overview" | "hardware" | "storage" | "containers" | "diagnostics" | "audit";
 type ContainerAction = "start" | "stop" | "restart";
+type HistoryRange = "1h" | "24h";
 
 type User = { username: string; role: "admin" | "operator" | "viewer" };
 type Container = {
@@ -31,6 +32,30 @@ type AuditEntry = {
   result: string;
   remoteIp?: string;
   detail?: string;
+};
+type HistoryPoint = {
+  timestamp: string;
+  cpuPercent: number;
+  processors: Array<{ socketId: string; utilizationPercent: number }>;
+  memoryPercent: number;
+  swapPercent: number;
+  diskPercent: number;
+  maximumTemperature: number;
+  receiveBytesPerSecond: number;
+  transmitBytesPerSecond: number;
+};
+type StorageDevice = {
+  name: string;
+  model: string;
+  vendor: string;
+  kind: string;
+  sizeBytes: number;
+  rotational: boolean;
+  removable: boolean;
+  temperatureCelsius?: number;
+  smartStatus: string;
+  smartReason: string;
+  mounts: Array<{ path: string; fileSystem: string; totalBytes: number; usedBytes: number }>;
 };
 type Metrics = {
   hostname: string;
@@ -72,6 +97,7 @@ type Metrics = {
     controlDisabledReason: string;
   };
   network: { receivedBytes: number; transmittedBytes: number; receiveBytesPerSecond: number; transmitBytesPerSecond: number };
+  storageDevices: StorageDevice[];
 };
 
 const API_BASE = "/api";
@@ -122,6 +148,10 @@ const demoMetrics: Metrics = {
     controlDisabledReason: "Только безопасное чтение до проверки профилей на этом сервере.",
   },
   network: { receivedBytes: 1.82 * 1024 ** 4, transmittedBytes: 684 * 1024 ** 3, receiveBytesPerSecond: 18.4 * 1024 ** 2, transmitBytesPerSecond: 2.7 * 1024 ** 2 },
+  storageDevices: [
+    { name: "sda", model: "Samsung SSD 870 EVO", vendor: "ATA", kind: "SSD", sizeBytes: 1.82 * 1024 ** 4, rotational: false, removable: false, temperatureCelsius: 37, smartStatus: "unavailable", smartReason: "SMART требует отдельного привилегированного помощника только для чтения.", mounts: [{ path: "/", fileSystem: "ext4", totalBytes: 1.79 * 1024 ** 4, usedBytes: 742 * 1024 ** 3 }] },
+    { name: "sdb", model: "ST2000DM008", vendor: "ATA", kind: "HDD", sizeBytes: 1.82 * 1024 ** 4, rotational: true, removable: false, temperatureCelsius: 34, smartStatus: "unavailable", smartReason: "SMART требует отдельного привилегированного помощника только для чтения.", mounts: [{ path: "/srv/data", fileSystem: "xfs", totalBytes: 1.81 * 1024 ** 4, usedBytes: 1.4 * 1024 ** 4 }] },
+  ],
 };
 
 const demoContainers: Container[] = [
@@ -143,7 +173,7 @@ const demoAudit: AuditEntry[] = [
   { timestamp: new Date(Date.now() - 3 * 3600_000).toISOString(), actor: "unknown", action: "auth.login", result: "denied", remoteIp: "10.0.0.19" },
 ];
 
-const initialHistory = [28, 31, 26, 42, 39, 34, 37, 51, 46, 41, 38, 34];
+const demoHistory = createDemoHistory();
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -155,7 +185,10 @@ export default function Home() {
   const [containers, setContainers] = useState<Container[]>(demoContainers);
   const [findings, setFindings] = useState<Finding[]>(demoFindings);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(demoAudit);
-  const [history, setHistory] = useState(initialHistory);
+  const [historyRange, setHistoryRange] = useState<HistoryRange>("1h");
+  const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>(demoHistory);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [agentVersion, setAgentVersion] = useState("demo");
   const [busy, setBusy] = useState(false);
@@ -181,7 +214,6 @@ export default function Home() {
       const data = (await metricResponse.json()) as { metrics: Metrics; agentVersion: string };
       setMetrics(data.metrics);
       setAgentVersion(data.agentVersion || "неизвестно");
-      setHistory((current) => [...current.slice(-23), Math.round(data.metrics.cpuPercent)]);
     }
     if (containerResponse.ok) {
       const data = (await containerResponse.json()) as { containers: Container[] };
@@ -197,6 +229,30 @@ export default function Home() {
     }
     setLastUpdated(new Date());
   }, [demoMode]);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      if (demoMode) {
+        const cutoff = Date.now() - (historyRange === "1h" ? 3600_000 : 24 * 3600_000);
+        setHistoryPoints(demoHistory.filter((point) => new Date(point.timestamp).getTime() >= cutoff));
+        return;
+      }
+      const response = await fetch(`${API_BASE}/history?range=${historyRange}`, { credentials: "include" });
+      if (response.status === 401) {
+        setAuthState("signed-out");
+        return;
+      }
+      const data = await response.json() as { points?: HistoryPoint[]; error?: string };
+      if (!response.ok) throw new Error(data.error || "Не удалось загрузить историю");
+      setHistoryPoints(data.points ?? []);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Не удалось загрузить историю");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [demoMode, historyRange]);
 
   useEffect(() => {
     const localDemo = process.env.NODE_ENV === "development"
@@ -229,6 +285,17 @@ export default function Home() {
       window.clearInterval(interval);
     };
   }, [authState, demoMode, loadDashboard]);
+
+  useEffect(() => {
+    if (authState !== "signed-in") return;
+    const initial = window.setTimeout(() => void loadHistory(), 0);
+    if (demoMode) return () => window.clearTimeout(initial);
+    const interval = window.setInterval(() => void loadHistory(), 30_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [authState, demoMode, loadHistory]);
 
   useEffect(() => {
     if (!toast) return;
@@ -319,6 +386,7 @@ export default function Home() {
         <nav className="nav-list">
           <NavButton active={tab === "overview"} icon="overview" label="Обзор" badge="live" onClick={() => setTab("overview")} />
           <NavButton active={tab === "hardware"} icon="hardware" label="Питание" badge={String(metrics.temperatures.length)} onClick={() => setTab("hardware")} />
+          <NavButton active={tab === "storage"} icon="storage" label="Диски" badge={String(metrics.storageDevices?.length ?? 0)} onClick={() => setTab("storage")} />
           <NavButton active={tab === "containers"} icon="containers" label="Контейнеры" badge={String(containers.length)} onClick={() => setTab("containers")} />
           <NavButton active={tab === "diagnostics"} icon="diagnostics" label="Диагностика" badge={String(findings.filter((item) => item.severity !== "ok").length)} onClick={() => setTab("diagnostics")} />
           <NavButton active={tab === "audit"} icon="audit" label="Журнал" onClick={() => setTab("audit")} />
@@ -340,8 +408,9 @@ export default function Home() {
 
         {demoMode && <div className="demo-banner"><strong>Режим предпросмотра.</strong> Показаны безопасные демонстрационные данные; на Ubuntu здесь появятся реальные метрики агента.</div>}
 
-        {tab === "overview" && <Overview metrics={metrics} usage={usage} history={history} findings={findings} containers={containers} lastUpdated={lastUpdated} />}
+        {tab === "overview" && <Overview metrics={metrics} usage={usage} history={historyPoints} historyRange={historyRange} historyLoading={historyLoading} historyError={historyError} onHistoryRange={setHistoryRange} onRetryHistory={loadHistory} findings={findings} containers={containers} lastUpdated={lastUpdated} />}
         {tab === "hardware" && <Hardware metrics={metrics} />}
+        {tab === "storage" && <Storage devices={metrics.storageDevices ?? []} />}
         {tab === "containers" && <Containers containers={containers} onAction={(container, action) => setPendingAction({ container, action })} />}
         {tab === "diagnostics" && <Diagnostics findings={findings} />}
         {tab === "audit" && <Audit entries={auditEntries} />}
@@ -353,7 +422,7 @@ export default function Home() {
   );
 }
 
-function Overview({ metrics, usage, history, findings, containers, lastUpdated }: { metrics: Metrics; usage: { memory: number; swap: number; disk: number; maxTemperature: number }; history: number[]; findings: Finding[]; containers: Container[]; lastUpdated: Date }) {
+function Overview({ metrics, usage, history, historyRange, historyLoading, historyError, onHistoryRange, onRetryHistory, findings, containers, lastUpdated }: { metrics: Metrics; usage: { memory: number; swap: number; disk: number; maxTemperature: number }; history: HistoryPoint[]; historyRange: HistoryRange; historyLoading: boolean; historyError: string; onHistoryRange: (range: HistoryRange) => void; onRetryHistory: () => void; findings: Finding[]; containers: Container[]; lastUpdated: Date }) {
   const critical = findings.filter((item) => item.severity === "critical").length;
   const running = containers.filter((item) => item.state === "running").length;
   return <div className="page-stack">
@@ -380,16 +449,9 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
 
     <aside className="explanation-card"><span className="explanation-code">SWAP</span><div><strong>Это страховочный резерв, а не дополнительная RAM.</strong><p>Linux временно переносит редко используемые страницы памяти на диск, чтобы избежать аварийной остановки процессов. Небольшое использование нормально; постоянный рост выше 70% означает нехватку RAM или слишком большую рабочую нагрузку.</p></div></aside>
 
-    <section className="dashboard-grid">
-      <article className="panel chart-panel">
-        <div className="panel-header"><div><p className="eyebrow">Последние измерения</p><h2>Нагрузка CPU</h2></div><span className="live-pill"><span className="status-dot" /> live</span></div>
-        <div className="chart-kpi"><strong>{metrics.cpuPercent.toFixed(0)}%</strong><span>сейчас</span></div>
-        <div className="bar-chart" aria-label={`График загрузки CPU, текущее значение ${metrics.cpuPercent.toFixed(0)} процентов`}>
-          {history.map((value, index) => <span key={`${index}-${value}`} style={{ height: `${Math.max(8, value)}%` }}><i>{value}%</i></span>)}
-        </div>
-        <div className="chart-axis"><span>раньше</span><span>сейчас</span></div>
-      </article>
+    <HistoryDashboard points={history} range={historyRange} loading={historyLoading} error={historyError} onRange={onHistoryRange} onRetry={onRetryHistory} />
 
+    <section className="dashboard-grid lower-grid">
       <article className="panel health-panel">
         <div className="panel-header"><div><p className="eyebrow">Состояние</p><h2>{critical ? "Требуется внимание" : "Система стабильна"}</h2></div><span className={`health-score ${critical ? "danger" : "healthy"}`}>{critical ? critical : "A"}</span></div>
         <dl className="health-list">
@@ -405,19 +467,111 @@ function Overview({ metrics, usage, history, findings, containers, lastUpdated }
           <div><dt>Последнее обновление</dt><dd>{lastUpdated.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</dd></div>
         </dl>
       </article>
-    </section>
-
-    <section className="dashboard-grid lower-grid">
       <article className="panel">
         <div className="panel-header"><div><p className="eyebrow">Активные замечания</p><h2>Диагностика</h2></div><span className="count-pill">{findings.length}</span></div>
         <div className="finding-compact-list">{findings.slice(0, 3).map((finding) => <div className="finding-compact" key={finding.id}><span className={`severity-marker ${finding.severity}`} /><div><strong>{finding.title}</strong><p>{finding.detail}</p></div></div>)}</div>
       </article>
-      <article className="panel capability-panel">
+    </section>
+    <section className="panel capability-panel">
         <div><p className="eyebrow">Безопасный rollout</p><h2>Питание и вентиляторы</h2><p>Недоступно в MVP до определения модели сервера, BMC/IPMI и допустимых температурных лимитов.</p></div>
         <div className="segmented disabled" aria-label="Профили питания пока недоступны"><span>Эко</span><span className="selected">Баланс</span><span>Турбо</span></div>
         <small>Будет включено только после аппаратной проверки и автоматического отката.</small>
-      </article>
     </section>
+  </div>;
+}
+
+type ChartSeries = { label: string; color: string; dash?: string; values: number[] };
+
+function HistoryDashboard({ points, range, loading, error, onRange, onRetry }: { points: HistoryPoint[]; range: HistoryRange; loading: boolean; error: string; onRange: (range: HistoryRange) => void; onRetry: () => void }) {
+  const socketIds = Array.from(new Set(points.flatMap((point) => (point.processors ?? []).map((processor) => processor.socketId)))).slice(0, 4);
+  const cpuSeries: ChartSeries[] = [
+    { label: "CPU всего", color: "#63a0ff", values: points.map((point) => point.cpuPercent) },
+    ...socketIds.map((socketId, index) => ({
+      label: `CPU ${index + 1}`,
+      color: ["#55d6be", "#b18cff", "#f6b95b", "#ff8294"][index],
+      dash: ["8 5", "2 5", "11 4 2 4", "4 4"][index],
+      values: points.map((point) => point.processors?.find((processor) => processor.socketId === socketId)?.utilizationPercent ?? 0),
+    })),
+  ];
+  const recent = points.slice(-10).reverse();
+  return <section className="panel history-panel" aria-labelledby="history-title">
+    <div className="history-toolbar">
+      <div><p className="eyebrow">Сохраняется локально</p><h2 id="history-title">История нагрузки</h2><p className="panel-description">До 24 часов, не более 720 точек на график. Данные доступны только после входа.</p></div>
+      <div className="history-actions">
+        {loading && <span className="history-loading" role="status">Обновление…</span>}
+        <div className="range-switch" aria-label="Период истории">
+          <button type="button" aria-pressed={range === "1h"} onClick={() => onRange("1h")}>1 час</button>
+          <button type="button" aria-pressed={range === "24h"} onClick={() => onRange("24h")}>24 часа</button>
+        </div>
+      </div>
+    </div>
+    {error && <div className="history-error" role="alert"><span>{error}</span><button type="button" onClick={onRetry}>Повторить</button></div>}
+    {points.length < 2 ? <div className="history-empty"><strong>История ещё накапливается</strong><p>Первые две точки появятся примерно через 30 секунд. Текущие показатели выше уже работают.</p></div> : <>
+      <div className="history-grid">
+        <LineChart className="wide" title="Процессоры" subtitle="Общая нагрузка и каждый физический сокет" points={points} series={cpuSeries} maximum={100} unit="%" range={range} />
+        <LineChart title="Память и диски" subtitle="RAM, swap и занятое файловое хранилище" points={points} series={[
+          { label: "RAM", color: "#b18cff", values: points.map((point) => point.memoryPercent) },
+          { label: "Swap", color: "#63a0ff", dash: "8 5", values: points.map((point) => point.swapPercent) },
+          { label: "Диски", color: "#f6b95b", dash: "2 5", values: points.map((point) => point.diskPercent) },
+        ]} maximum={100} unit="%" range={range} />
+        <LineChart title="Температура" subtitle="Максимум среди доступных датчиков" points={points} series={[{ label: "Максимум", color: "#f6b95b", values: points.map((point) => point.maximumTemperature) }]} maximum={100} unit="°C" range={range} />
+        <LineChart className="wide" title="Сеть" subtitle="Текущая скорость входящего и исходящего трафика" points={points} series={[
+          { label: "Приём", color: "#55d6be", values: points.map((point) => point.receiveBytesPerSecond) },
+          { label: "Передача", color: "#63a0ff", dash: "8 5", values: points.map((point) => point.transmitBytesPerSecond) },
+        ]} unit="Б/с" valueFormatter={formatRate} range={range} />
+      </div>
+      <details className="history-data"><summary>Показать последние значения таблицей</summary><div className="table-wrap"><table><thead><tr><th>Время</th><th>CPU всего</th>{socketIds.map((id, index) => <th key={id}>CPU {index + 1}</th>)}<th>RAM</th><th>Swap</th><th>Диск</th><th>Темп.</th><th>↓ сеть</th><th>↑ сеть</th></tr></thead><tbody>{recent.map((point) => <tr key={point.timestamp}><td>{formatHistoryTime(point.timestamp, range)}</td><td>{point.cpuPercent.toFixed(0)}%</td>{socketIds.map((id) => <td key={id}>{(point.processors?.find((processor) => processor.socketId === id)?.utilizationPercent ?? 0).toFixed(0)}%</td>)}<td>{point.memoryPercent.toFixed(0)}%</td><td>{point.swapPercent.toFixed(0)}%</td><td>{point.diskPercent.toFixed(0)}%</td><td>{point.maximumTemperature ? `${point.maximumTemperature.toFixed(0)}°C` : "—"}</td><td>{formatRate(point.receiveBytesPerSecond)}</td><td>{formatRate(point.transmitBytesPerSecond)}</td></tr>)}</tbody></table></div></details>
+    </>}
+  </section>;
+}
+
+function LineChart({ title, subtitle, points, series, maximum, unit, valueFormatter, range, className = "" }: { title: string; subtitle: string; points: HistoryPoint[]; series: ChartSeries[]; maximum?: number; unit: string; valueFormatter?: (value: number) => string; range: HistoryRange; className?: string }) {
+  const width = 640;
+  const height = 220;
+  const inset = { top: 16, right: 16, bottom: 34, left: 48 };
+  const plotWidth = width - inset.left - inset.right;
+  const plotHeight = height - inset.top - inset.bottom;
+  const observed = Math.max(0, ...series.flatMap((item) => item.values));
+  const yMaximum = maximum ?? niceMaximum(observed);
+  const formatValue = valueFormatter ?? ((value: number) => `${value.toFixed(0)}${unit}`);
+  const makePath = (values: number[]) => values.map((value, index) => {
+    const x = inset.left + index / Math.max(1, values.length - 1) * plotWidth;
+    const y = inset.top + (1 - Math.min(yMaximum, Math.max(0, value)) / yMaximum) * plotHeight;
+    return `${index ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const firstTime = points[0]?.timestamp;
+  const lastTime = points.at(-1)?.timestamp;
+  return <article className={`line-chart-card ${className}`}>
+    <div className="line-chart-heading"><div><h3>{title}</h3><p>{subtitle}</p></div><div className="chart-current">{series.map((item) => <span key={item.label}><small>{item.label}</small><strong>{formatValue(item.values.at(-1) ?? 0)}</strong></span>)}</div></div>
+    <div className="chart-legend" aria-label="Легенда графика">{series.map((item) => <span key={item.label}><svg viewBox="0 0 28 8" aria-hidden="true"><line x1="1" y1="4" x2="27" y2="4" stroke={item.color} strokeWidth="2.5" strokeDasharray={item.dash} /></svg>{item.label}</span>)}</div>
+    <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title}: ${series.map((item) => `${item.label} ${formatValue(item.values.at(-1) ?? 0)}`).join(", ")}`}>
+      <title>{title}. Период {range === "1h" ? "один час" : "24 часа"}.</title>
+      {[0, 0.25, 0.5, 0.75, 1].map((part) => { const y = inset.top + part * plotHeight; const value = yMaximum * (1 - part); return <g key={part}><line className="chart-grid-line" x1={inset.left} x2={width - inset.right} y1={y} y2={y} /><text className="chart-axis-label" x={inset.left - 9} y={y + 4} textAnchor="end">{formatValue(value)}</text></g>; })}
+      {series.map((item) => <path key={item.label} className="chart-line" d={makePath(item.values)} stroke={item.color} strokeDasharray={item.dash} />)}
+      <text className="chart-axis-label" x={inset.left} y={height - 8}>{formatHistoryTime(firstTime, range)}</text>
+      <text className="chart-axis-label" x={width - inset.right} y={height - 8} textAnchor="end">{formatHistoryTime(lastTime, range)}</text>
+    </svg>
+  </article>;
+}
+
+function Storage({ devices }: { devices: StorageDevice[] }) {
+  const totalBytes = devices.reduce((sum, device) => sum + device.sizeBytes, 0);
+  const mounts = devices.flatMap((device) => device.mounts ?? []);
+  const maximumTemperature = Math.max(0, ...devices.map((device) => device.temperatureCelsius ?? 0));
+  return <div className="page-stack">
+    <section className="summary-strip four" aria-label="Сводка физических дисков">
+      <div><span className="summary-number">{devices.length}</span><span>физических дисков</span></div>
+      <div><span className="summary-number">{formatBytes(totalBytes)}</span><span>общая ёмкость</span></div>
+      <div><span className="summary-number">{mounts.length}</span><span>точек монтирования</span></div>
+      <div><span className="summary-number">{maximumTemperature ? `${maximumTemperature.toFixed(0)}°C` : "—"}</span><span>макс. температура</span></div>
+    </section>
+    <aside className="explanation-card"><span className="explanation-code">SAFE</span><div><strong>Jinay только читает безопасные сведения Linux.</strong><p>Серийные номера не выводятся. SMART и прямой доступ к устройствам останутся отключены, пока не появится отдельный минимальный помощник только для чтения.</p></div></aside>
+    {devices.length ? <section className="storage-grid" aria-label="Физические накопители">{devices.map((device) => <article className="panel storage-card" key={device.name}>
+      <div className="storage-card-top"><div><span className={`drive-kind ${device.kind.toLowerCase()}`}>{device.kind || "Диск"}</span><h2>{device.model || `Устройство ${device.name}`}</h2><p>{device.vendor || "Производитель не определён"} · /dev/{device.name}</p></div><strong>{formatBytes(device.sizeBytes)}</strong></div>
+      <dl className="storage-facts"><div><dt>Носитель</dt><dd>{device.rotational ? "Механический" : "Твердотельный"}{device.removable ? " · съёмный" : ""}</dd></div><div><dt>Температура</dt><dd>{device.temperatureCelsius ? `${device.temperatureCelsius.toFixed(1)}°C` : "датчик недоступен"}</dd></div><div><dt>SMART</dt><dd>{device.smartStatus === "available" ? "доступен" : "не подключён"}</dd></div></dl>
+      <div className="mount-list"><h3>Разделы и точки монтирования</h3>{device.mounts?.length ? device.mounts.map((mount) => { const usage = ratio(mount.usedBytes, mount.totalBytes); return <div className="mount-row" key={`${mount.path}-${mount.fileSystem}`}><div><strong>{mount.path}</strong><span>{mount.fileSystem || "файловая система не определена"}</span></div><div className="mount-value"><strong>{usage.toFixed(0)}%</strong><span>{formatBytes(mount.usedBytes)} из {formatBytes(mount.totalBytes)}</span></div><div className="progress-track compact" role="progressbar" aria-label={`${mount.path}: занято ${usage.toFixed(0)} процентов`} aria-valuenow={Math.round(usage)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${Math.min(100, Math.max(0, usage))}%` }} /></div></div>; }) : <p className="empty-telemetry">На этом физическом диске не найдены смонтированные файловые системы.</p>}</div>
+      {device.smartStatus !== "available" && <p className="smart-note"><strong>Почему нет SMART:</strong> {device.smartReason || "Нужен отдельный привилегированный источник только для чтения."}</p>}
+    </article>)}</section> : <section className="panel history-empty"><strong>Физические диски не определены</strong><p>Проверьте, что агент запущен на Linux и имеет доступ к /sys/block и /proc/self/mountinfo. Контейнерные loop-устройства намеренно скрыты.</p></section>}
   </div>;
 }
 
@@ -501,7 +655,7 @@ function MetricCard({ code, label, value, detail, progress, tone }: { code: stri
   return <article className={`metric-card ${tone}`}><div className="metric-label"><span><i />{label}</span><small>{code}</small></div><strong className="metric-value">{value}</strong><p>{detail}</p><div className="progress-track"><span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div></article>;
 }
 
-type NavIconName = "overview" | "hardware" | "containers" | "diagnostics" | "audit";
+type NavIconName = "overview" | "hardware" | "storage" | "containers" | "diagnostics" | "audit";
 
 function NavButton({ active, icon, label, badge, onClick }: { active: boolean; icon: NavIconName; label: string; badge?: string; onClick: () => void }) {
   return <button type="button" className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={onClick}><span className="nav-label"><NavIcon name={icon} />{label}</span>{badge && <small>{badge}</small>}</button>;
@@ -511,6 +665,7 @@ function NavIcon({ name }: { name: NavIconName }) {
   const paths = {
     overview: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
     hardware: <><path d="M13 2 5.5 13h5L9.8 22 18.5 10h-5L13 2Z" /><path d="M4 4v5" /><path d="M2 6.5h4" /></>,
+    storage: <><ellipse cx="12" cy="5.5" rx="8" ry="3" /><path d="M4 5.5v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /><path d="M4 11.5v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>,
     containers: <><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z" /><path d="m4 12 8 4.5 8-4.5" /><path d="m4 16.5 8 4.5 8-4.5" /></>,
     diagnostics: <><path d="M12 3 4.5 6v5.5c0 4.5 3 7.7 7.5 9.5 4.5-1.8 7.5-5 7.5-9.5V6L12 3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
     audit: <><path d="M6 4h12" /><path d="M6 9h12" /><path d="M6 14h8" /><path d="M6 19h5" /><circle cx="18" cy="18" r="3" /></>,
@@ -532,10 +687,31 @@ function LoadingScreen() { return <main className="loading-screen"><div classNam
 function ratio(used: number, total: number) { return total > 0 ? used / total * 100 : 0; }
 function formatBytes(bytes: number) { if (!bytes) return "0 Б"; const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"]; const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return `${(bytes / 1024 ** power).toLocaleString("ru-RU", { maximumFractionDigits: power > 2 ? 1 : 0 })} ${units[power]}`; }
 function formatUptime(seconds: number) { const days = Math.floor(seconds / 86400); const hours = Math.floor((seconds % 86400) / 3600); return `${days} д ${hours} ч`; }
-function tabTitle(tab: Tab) { return ({ overview: "Обзор сервера", hardware: "Питание и охлаждение", containers: "Docker-контейнеры", diagnostics: "Диагностика", audit: "Журнал действий" })[tab]; }
-function tabDescription(tab: Tab) { return ({ overview: "Живое состояние, ресурсы и ключевые риски узла.", hardware: "Частоты CPU, governor, swap, температуры и доступность датчиков вентиляторов.", containers: "Контроль жизненного цикла разрешённых контейнеров.", diagnostics: "Проблемы, рекомендации и состояние защиты.", audit: "Проверяемая история входов и привилегированных операций." })[tab]; }
+function tabTitle(tab: Tab) { return ({ overview: "Обзор сервера", hardware: "Питание и охлаждение", storage: "Физические диски", containers: "Docker-контейнеры", diagnostics: "Диагностика", audit: "Журнал действий" })[tab]; }
+function tabDescription(tab: Tab) { return ({ overview: "Живое состояние, ресурсы и история нагрузки узла.", hardware: "Частоты CPU, governor, температуры и доступность датчиков вентиляторов.", storage: "Устройства, точки монтирования, заполнение и доступные датчики.", containers: "Контроль жизненного цикла разрешённых контейнеров.", diagnostics: "Проблемы, рекомендации и состояние защиты.", audit: "Проверяемая история входов и привилегированных операций." })[tab]; }
 function roleLabel(role: User["role"]) { return ({ admin: "Администратор", operator: "Оператор", viewer: "Наблюдатель" })[role]; }
 function severityLabel(severity: Finding["severity"]) { return ({ ok: "Норма", info: "Информация", warning: "Внимание", critical: "Критично" })[severity]; }
 function labelAction(action: ContainerAction) { return ({ start: "Запустить", stop: "Остановить", restart: "Перезапустить" })[action]; }
 function formatFrequency(megahertz: number) { return megahertz > 0 ? `${(megahertz / 1000).toFixed(2)} ГГц` : "—"; }
 function formatRate(bytesPerSecond: number) { return `${formatBytes(bytesPerSecond)}/с`; }
+function formatHistoryTime(timestamp: string | undefined, range: HistoryRange) { if (!timestamp) return "—"; return new Date(timestamp).toLocaleString("ru-RU", range === "1h" ? { hour: "2-digit", minute: "2-digit" } : { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+function niceMaximum(value: number) { if (value <= 0) return 1; const power = 10 ** Math.floor(Math.log10(value)); return Math.max(power, Math.ceil(value / power) * power); }
+function createDemoHistory(): HistoryPoint[] {
+  const now = Date.now();
+  return Array.from({ length: 289 }, (_, index) => {
+    const phase = index / 13;
+    const cpu1 = Math.max(5, Math.min(92, 31 + Math.sin(phase) * 13 + Math.sin(phase * 2.7) * 7));
+    const cpu2 = Math.max(5, Math.min(92, 37 + Math.cos(phase * .83) * 15 + Math.sin(phase * 2.1) * 5));
+    return {
+      timestamp: new Date(now - (288 - index) * 5 * 60_000).toISOString(),
+      cpuPercent: (cpu1 + cpu2) / 2,
+      processors: [{ socketId: "0", utilizationPercent: cpu1 }, { socketId: "1", utilizationPercent: cpu2 }],
+      memoryPercent: 39 + Math.sin(phase * .35) * 4 + index / 289 * 3,
+      swapPercent: 4.2 + Math.max(0, Math.sin(phase * .18)) * 1.4,
+      diskPercent: 58.2 + index / 289 * .6,
+      maximumTemperature: 54 + Math.max(cpu1, cpu2) * .12,
+      receiveBytesPerSecond: (9 + Math.max(0, Math.sin(phase * 1.4)) * 24) * 1024 ** 2,
+      transmitBytesPerSecond: (1.8 + Math.max(0, Math.cos(phase * 1.7)) * 7) * 1024 ** 2,
+    };
+  });
+}
