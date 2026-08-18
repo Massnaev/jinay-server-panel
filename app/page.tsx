@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 type Tab = "overview" | "hardware" | "storage" | "containers" | "diagnostics" | "audit";
 type ContainerAction = "start" | "stop" | "restart";
 type HistoryRange = "1h" | "24h";
+type PowerProfile = "eco" | "balanced" | "turbo";
 
 type User = { username: string; role: "admin" | "operator" | "viewer" };
 type Container = {
@@ -93,6 +94,10 @@ type Metrics = {
     maximumFrequencyMHz: number;
     platformProfile: string;
     availableProfiles: string[];
+    activeProfile: string;
+    maximumLimitMHz: number;
+    turboAllowed: boolean;
+    ecoMaximumPercent: number;
     controlSupported: boolean;
     controlDisabledReason: string;
   };
@@ -144,8 +149,12 @@ const demoMetrics: Metrics = {
     maximumFrequencyMHz: 3600,
     platformProfile: "",
     availableProfiles: [],
-    controlSupported: false,
-    controlDisabledReason: "Только безопасное чтение до проверки профилей на этом сервере.",
+    activeProfile: "balanced",
+    maximumLimitMHz: 3600,
+    turboAllowed: true,
+    ecoMaximumPercent: 65,
+    controlSupported: true,
+    controlDisabledReason: "",
   },
   network: { receivedBytes: 1.82 * 1024 ** 4, transmittedBytes: 684 * 1024 ** 3, receiveBytesPerSecond: 18.4 * 1024 ** 2, transmitBytesPerSecond: 2.7 * 1024 ** 2 },
   storageDevices: [
@@ -194,6 +203,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [pendingAction, setPendingAction] = useState<{ container: Container; action: ContainerAction } | null>(null);
+  const [pendingPowerProfile, setPendingPowerProfile] = useState<PowerProfile | null>(null);
 
   const loadDashboard = useCallback(async () => {
     if (demoMode) {
@@ -375,6 +385,43 @@ export default function Home() {
     }
   }
 
+  async function runPowerProfile() {
+    if (!pendingPowerProfile) return;
+    const profile = pendingPowerProfile;
+    setBusy(true);
+    try {
+      if (!demoMode) {
+        const response = await fetch(`${API_BASE}/power/profile`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+          body: JSON.stringify({ profile }),
+        });
+        const data = await response.json() as { error?: string };
+        if (response.status === 428) setAuthState("signed-out");
+        if (!response.ok) throw new Error(data.error || "Профиль питания не применён");
+      } else {
+        setMetrics((current) => ({
+          ...current,
+          power: {
+            ...current.power,
+            activeProfile: profile,
+            governor: profile === "turbo" ? "performance" : "schedutil",
+            maximumLimitMHz: profile === "eco" ? current.power.maximumFrequencyMHz * current.power.ecoMaximumPercent / 100 : current.power.maximumFrequencyMHz,
+            turboAllowed: profile !== "eco",
+          },
+        }));
+      }
+      setPendingPowerProfile(null);
+      setToast(`Профиль «${powerProfileLabel(profile)}» применён ко всем CPU`);
+      await loadDashboard();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Профиль питания не применён");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (authState === "checking") return <LoadingScreen />;
   if (authState === "signed-out") return <LoginScreen busy={busy} onSubmit={signIn} demoMode={demoMode} />;
 
@@ -392,7 +439,7 @@ export default function Home() {
           <NavButton active={tab === "audit"} icon="audit" label="Журнал" onClick={() => setTab("audit")} />
         </nav>
         <div className="sidebar-footer">
-          <div className="future-card"><span>Следующий этап</span><strong>Codex и профили питания</strong><p>После проверки MVP и сервера по SSH.</p></div>
+          <div className="future-card"><span>Следующий этап</span><strong>SMART и Codex</strong><p>Через отдельные минимальные помощники без публичного root-доступа.</p></div>
           <button className="account-button" type="button" onClick={signOut}><span className="avatar">{user.username.slice(0, 2).toUpperCase()}</span><span><strong>{user.username}</strong><small>{roleLabel(user.role)}</small></span><span className="logout-label">Выйти</span></button>
         </div>
       </aside>
@@ -409,7 +456,7 @@ export default function Home() {
         {demoMode && <div className="demo-banner"><strong>Режим предпросмотра.</strong> Показаны безопасные демонстрационные данные; на Ubuntu здесь появятся реальные метрики агента.</div>}
 
         {tab === "overview" && <Overview metrics={metrics} usage={usage} history={historyPoints} historyRange={historyRange} historyLoading={historyLoading} historyError={historyError} onHistoryRange={setHistoryRange} onRetryHistory={loadHistory} findings={findings} containers={containers} lastUpdated={lastUpdated} />}
-        {tab === "hardware" && <Hardware metrics={metrics} />}
+        {tab === "hardware" && <Hardware metrics={metrics} user={user} busy={busy} onPowerProfile={setPendingPowerProfile} />}
         {tab === "storage" && <Storage devices={metrics.storageDevices ?? []} />}
         {tab === "containers" && <Containers containers={containers} onAction={(container, action) => setPendingAction({ container, action })} />}
         {tab === "diagnostics" && <Diagnostics findings={findings} />}
@@ -417,6 +464,7 @@ export default function Home() {
       </main>
 
       {pendingAction && <ConfirmDialog pending={pendingAction} busy={busy} onCancel={() => setPendingAction(null)} onConfirm={runContainerAction} />}
+      {pendingPowerProfile && <PowerConfirmDialog profile={pendingPowerProfile} metrics={metrics} busy={busy} onCancel={() => setPendingPowerProfile(null)} onConfirm={runPowerProfile} />}
       {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
     </div>
   );
@@ -473,9 +521,9 @@ function Overview({ metrics, usage, history, historyRange, historyLoading, histo
       </article>
     </section>
     <section className="panel capability-panel">
-        <div><p className="eyebrow">Безопасный rollout</p><h2>Питание и вентиляторы</h2><p>Недоступно в MVP до определения модели сервера, BMC/IPMI и допустимых температурных лимитов.</p></div>
-        <div className="segmented disabled" aria-label="Профили питания пока недоступны"><span>Эко</span><span className="selected">Баланс</span><span>Турбо</span></div>
-        <small>Будет включено только после аппаратной проверки и автоматического отката.</small>
+        <div><p className="eyebrow">CPU power policy</p><h2>Питание и вентиляторы</h2><p>Активен профиль «{powerProfileLabel(metrics.power.activeProfile)}». Ограничение частоты уменьшает нагрев CPU, после чего автоматика платы может снизить обороты вентиляторов.</p></div>
+        <div className="power-overview-state"><span>{formatFrequency(metrics.power.maximumLimitMHz || metrics.power.maximumFrequencyMHz)}</span><small>лимит · Turbo {metrics.power.turboAllowed ? "разрешён" : "выключен"}</small></div>
+        <small>Прямое управление вентиляторами не выполняется без подтверждённого BMC/PWM-интерфейса.</small>
     </section>
   </div>;
 }
@@ -575,7 +623,7 @@ function Storage({ devices }: { devices: StorageDevice[] }) {
   </div>;
 }
 
-function Hardware({ metrics }: { metrics: Metrics }) {
+function Hardware({ metrics, user, busy, onPowerProfile }: { metrics: Metrics; user: User; busy: boolean; onPowerProfile: (profile: PowerProfile) => void }) {
   const maximumTemperature = Math.max(0, ...metrics.temperatures.map((sensor) => sensor.celsius));
   const processors = metrics.system.processors ?? [];
   const gpus = metrics.system.gpus ?? [];
@@ -604,17 +652,25 @@ function Hardware({ metrics }: { metrics: Metrics }) {
 
     <section className="dashboard-grid lower-grid">
       <article className="panel capability-panel power-panel">
-        <div className="panel-header"><div><p className="eyebrow">CPU frequency policy</p><h2>Профиль энергопотребления</h2></div><span className="live-pill">только чтение</span></div>
+        <div className="panel-header"><div><p className="eyebrow">CPU frequency policy</p><h2>Профиль энергопотребления</h2></div><span className={`live-pill ${metrics.power.controlSupported ? "enabled" : ""}`}>{metrics.power.controlSupported ? "управление включено" : "только чтение"}</span></div>
         <dl className="health-list">
           <div><dt>Драйвер</dt><dd>{metrics.power.driver || "недоступно"}</dd></div>
           <div><dt>Governor</dt><dd>{metrics.power.governor || "недоступно"}</dd></div>
-          <div><dt>Диапазон</dt><dd>{formatFrequency(metrics.power.minimumFrequencyMHz)} — {formatFrequency(metrics.power.maximumFrequencyMHz)}</dd></div>
+          <div><dt>Активный профиль</dt><dd>{powerProfileLabel(metrics.power.activeProfile)}</dd></div>
+          <div><dt>Рабочий диапазон</dt><dd>{formatFrequency(metrics.power.minimumFrequencyMHz)} — {formatFrequency(metrics.power.maximumLimitMHz || metrics.power.maximumFrequencyMHz)}</dd></div>
+          <div><dt>Аппаратный максимум</dt><dd>{formatFrequency(metrics.power.maximumFrequencyMHz)}</dd></div>
+          <div><dt>Turbo Boost</dt><dd>{metrics.power.turboAllowed ? "разрешён" : "выключен"}</dd></div>
           <div><dt>Доступные governor</dt><dd>{metrics.power.availableGovernors.join(", ") || "не объявлены ядром"}</dd></div>
           <div><dt>ACPI-профиль</dt><dd>{metrics.power.platformProfile || "не поддерживается"}</dd></div>
         </dl>
-        <div className="segmented disabled" aria-label="Переключение профилей пока заблокировано"><span>Эко</span><span className="selected">Баланс</span><span>Турбо</span></div>
-        <small>{metrics.power.controlDisabledReason || "Переключение будет доступно после аппаратной проверки и настройки отката."}</small>
-        <div className="power-glossary"><p><strong>Governor</strong> задаёт, как Linux выбирает частоту CPU.</p><p><strong>Текущая частота</strong> — среднее по доступным ядрам, а не показатель одного процессора.</p><p><strong>ACPI-профиль</strong> — режим всей платформы, только если его предоставляет BIOS/BMC.</p></div>
+        <div className="power-profile-grid" aria-label="Профили питания">
+          <PowerProfileButton profile="eco" active={metrics.power.activeProfile === "eco"} disabled={busy || !metrics.power.controlSupported || user.role !== "admin"} onClick={onPowerProfile} title="Эко" value={`до ${metrics.power.ecoMaximumPercent || 65}%`} detail="Turbo выключен · ниже нагрев" />
+          <PowerProfileButton profile="balanced" active={metrics.power.activeProfile === "balanced"} disabled={busy || !metrics.power.controlSupported || user.role !== "admin"} onClick={onPowerProfile} title="Баланс" value="динамически" detail="Полный диапазон по нагрузке" />
+          <PowerProfileButton profile="turbo" active={metrics.power.activeProfile === "turbo"} disabled={busy || !metrics.power.controlSupported || user.role !== "admin"} onClick={onPowerProfile} title="Турбо" value="максимум" detail="Больше расход и нагрев" />
+        </div>
+        {!metrics.power.controlSupported && <small className="power-state-note">{metrics.power.controlDisabledReason || "Драйвер CPU не предоставляет безопасные регуляторы."}</small>}
+        {metrics.power.controlSupported && user.role !== "admin" && <small className="power-state-note">Переключать профили может только администратор.</small>}
+        <div className="power-glossary"><p><strong>Эко</strong> ограничивает каждый CPU-полис до {metrics.power.ecoMaximumPercent || 65}% аппаратного максимума и запрещает Turbo Boost.</p><p><strong>Баланс</strong> возвращает полный диапазон и меняет частоту по нагрузке.</p><p><strong>Турбо</strong> удерживает governor performance; используйте его только для коротких тяжёлых задач.</p></div>
       </article>
 
       <article className="panel">
@@ -678,6 +734,19 @@ function ConfirmDialog({ pending, busy, onCancel, onConfirm }: { pending: { cont
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><span className={`modal-symbol ${dangerous ? "danger" : "warning"}`}>{dangerous ? "!" : "↻"}</span><p className="eyebrow">Подтверждение операции</p><h2 id="confirm-title">{labelAction(pending.action)} «{pending.container.name}»?</h2><p>Агент выполнит только команду <code>docker {pending.action} {pending.container.id}</code>. Событие попадёт в журнал.</p><div className="modal-actions"><button className="button secondary" type="button" onClick={onCancel} disabled={busy}>Отмена</button><button className={`button ${dangerous ? "danger" : "primary"}`} type="button" onClick={onConfirm} disabled={busy}>{busy ? "Выполняется…" : "Подтвердить"}</button></div></div></div>;
 }
 
+function PowerProfileButton({ profile, active, disabled, onClick, title, value, detail }: { profile: PowerProfile; active: boolean; disabled: boolean; onClick: (profile: PowerProfile) => void; title: string; value: string; detail: string }) {
+  return <button className={`power-profile-card ${profile}`} type="button" aria-pressed={active} disabled={disabled || active} onClick={() => onClick(profile)}><span>{title}{active && <small>активен</small>}</span><strong>{value}</strong><p>{detail}</p></button>;
+}
+
+function PowerConfirmDialog({ profile, metrics, busy, onCancel, onConfirm }: { profile: PowerProfile; metrics: Metrics; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
+  const detail = profile === "eco"
+    ? `Jinay ограничит все CPU-полисы до ${metrics.power.ecoMaximumPercent || 65}% аппаратной частоты и отключит Turbo Boost.`
+    : profile === "balanced"
+      ? "Jinay вернёт полный диапазон частот, разрешит Turbo Boost и включит динамический governor."
+      : "Jinay разрешит Turbo Boost и включит governor performance. Расход энергии и температура могут заметно вырасти.";
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="power-confirm-title"><span className={`modal-symbol ${profile === "turbo" ? "danger" : "warning"}`}>{profile === "eco" ? "↓" : profile === "turbo" ? "↑" : "↻"}</span><p className="eyebrow">Подтверждение профиля</p><h2 id="power-confirm-title">Включить «{powerProfileLabel(profile)}»?</h2><p>{detail} Настройки проверяются после записи; при ошибке применяется автоматический откат.</p><div className="modal-actions"><button className="button secondary" type="button" onClick={onCancel} disabled={busy}>Отмена</button><button className={`button ${profile === "turbo" ? "danger" : "primary"}`} type="button" onClick={onConfirm} disabled={busy}>{busy ? "Применяется…" : "Применить"}</button></div></div></div>;
+}
+
 function LoginScreen({ busy, onSubmit, demoMode }: { busy: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; demoMode: boolean }) {
   return <main className="login-page"><section className="login-intro"><div className="brand large"><span className="brand-mark">J</span><span>Jinay<small>Server Panel</small></span></div><div><p className="eyebrow">Сервер под контролем</p><h1>Главное состояние — без терминального шума.</h1><p>Метрики, Docker и диагностика в одной защищённой панели. Привилегированные действия ограничены и записываются в журнал.</p></div><div className="login-trust"><span>Loopback agent</span><span>CSRF protection</span><span>No shell endpoint</span></div></section><section className="login-form-wrap"><form className="login-form" onSubmit={onSubmit}><div><p className="eyebrow">Авторизация</p><h2>Войти в Jinay</h2><p>Используйте аккаунт, созданный командой на Ubuntu.</p></div>{demoMode && <div className="form-note">Локальный демо-режим: введите любые непустые значения.</div>}<label htmlFor="username">Логин</label><input id="username" name="username" autoComplete="username" required defaultValue={demoMode ? "admin" : ""} /><label htmlFor="password">Пароль</label><input id="password" name="password" type="password" autoComplete="current-password" required defaultValue={demoMode ? "demo-password" : ""} /><button className="button primary full" type="submit" disabled={busy}>{busy ? "Проверка…" : "Войти"}</button><small>После 5 неудачных попыток вход временно блокируется.</small></form></section></main>;
 }
@@ -692,6 +761,7 @@ function tabDescription(tab: Tab) { return ({ overview: "Живое состоя
 function roleLabel(role: User["role"]) { return ({ admin: "Администратор", operator: "Оператор", viewer: "Наблюдатель" })[role]; }
 function severityLabel(severity: Finding["severity"]) { return ({ ok: "Норма", info: "Информация", warning: "Внимание", critical: "Критично" })[severity]; }
 function labelAction(action: ContainerAction) { return ({ start: "Запустить", stop: "Остановить", restart: "Перезапустить" })[action]; }
+function powerProfileLabel(profile: string) { return ({ eco: "Эко", balanced: "Баланс", turbo: "Турбо" } as Record<string, string>)[profile] || "Не определён"; }
 function formatFrequency(megahertz: number) { return megahertz > 0 ? `${(megahertz / 1000).toFixed(2)} ГГц` : "—"; }
 function formatRate(bytesPerSecond: number) { return `${formatBytes(bytesPerSecond)}/с`; }
 function formatHistoryTime(timestamp: string | undefined, range: HistoryRange) { if (!timestamp) return "—"; return new Date(timestamp).toLocaleString("ru-RU", range === "1h" ? { hour: "2-digit", minute: "2-digit" } : { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); }
