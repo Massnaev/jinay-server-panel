@@ -678,18 +678,58 @@ func readPowerInfo() PowerInfo {
 	current := readGlobKilohertz("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq")
 	minimum := readKilohertz("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq")
 	maximum := readKilohertz("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+	maximumLimits := readGlobKilohertz("/sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq")
+	maximumLimit := average(maximumLimits)
+	noTurbo := readTrimmed("/sys/devices/system/cpu/intel_pstate/no_turbo")
+	turboAllowed := noTurbo != "1"
+	governor := joinedState(governors)
+	activeProfile := detectedPowerProfile(governor, maximumLimit, maximum, turboAllowed)
+	controlSupported := len(maximumLimits) > 0 && containsWord(available, "performance") && (containsWord(available, "schedutil") || containsWord(available, "ondemand") || containsWord(available, "conservative"))
+	disabledReason := ""
+	if !controlSupported {
+		disabledReason = "The CPU frequency driver does not expose the governors and limits required by Jinay."
+	}
 	return PowerInfo{
-		Governor:              joinedState(governors),
+		Governor:              governor,
+		ActiveProfile:         activeProfile,
 		AvailableGovernors:    available,
 		Driver:                joinedState(drivers),
 		CurrentFrequencyMHz:   average(current),
 		MinimumFrequencyMHz:   minimum,
 		MaximumFrequencyMHz:   maximum,
+		MaximumLimitMHz:       maximumLimit,
+		TurboAllowed:          turboAllowed,
+		EcoMaximumPercent:     65,
 		PlatformProfile:       readTrimmed("/sys/firmware/acpi/platform_profile"),
 		AvailableProfiles:     readWords("/sys/firmware/acpi/platform_profile_choices"),
-		ControlSupported:      false,
-		ControlDisabledReason: "Read-only detection is enabled; safe profile switching requires a validated privileged helper and rollback.",
+		ControlSupported:      controlSupported,
+		ControlDisabledReason: disabledReason,
 	}
+}
+
+func detectedPowerProfile(governor string, maximumLimit, hardwareMaximum float64, turboAllowed bool) string {
+	if hardwareMaximum <= 0 || maximumLimit <= 0 {
+		return "unknown"
+	}
+	if maximumLimit <= hardwareMaximum*0.7 {
+		return "eco"
+	}
+	if governor == "performance" && turboAllowed && maximumLimit >= hardwareMaximum*0.98 {
+		return "turbo"
+	}
+	if (governor == "schedutil" || governor == "ondemand" || governor == "conservative") && turboAllowed && maximumLimit >= hardwareMaximum*0.98 {
+		return "balanced"
+	}
+	return "custom"
+}
+
+func containsWord(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func readGlobValues(pattern string) []string {

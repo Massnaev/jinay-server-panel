@@ -32,6 +32,8 @@ func ReadMetrics() (Metrics, error) {
 		Fans:             []Fan{},
 		StorageDevices:   []StorageDevice{},
 		Power: PowerInfo{
+			ActiveProfile:         "unknown",
+			EcoMaximumPercent:     65,
 			Governor:              "unavailable",
 			Driver:                "unavailable",
 			AvailableGovernors:    []string{},

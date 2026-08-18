@@ -36,9 +36,14 @@ mkdir -p "${stage}/bin" "${stage}/web" "${stage}/deploy"
   CGO_ENABLED=0 GOOS=linux GOARCH="${architecture}" \
     go build -trimpath -ldflags="-s -w -X main.version=${release_version}" \
     -o "${stage}/bin/serverpanel-agent" ./cmd/serverpanel
+
+  CGO_ENABLED=0 GOOS=linux GOARCH="${architecture}" \
+    go build -trimpath -ldflags="-s -w" \
+    -o "${stage}/bin/serverpanel-power-helper" ./cmd/powerhelper
 )
 
 install -m 0644 deploy/serverpanel-agent.service "${stage}/deploy/serverpanel-agent.service"
+install -m 0644 deploy/serverpanel-power-helper.service "${stage}/deploy/serverpanel-power-helper.service"
 install -m 0644 deploy/jinay-update.service "${stage}/deploy/jinay-update.service"
 install -m 0644 deploy/jinay-update.timer "${stage}/deploy/jinay-update.timer"
 install -m 0755 deploy/jinay-update "${stage}/deploy/jinay-update"

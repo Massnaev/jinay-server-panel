@@ -15,11 +15,15 @@ type Fan struct {
 
 type PowerInfo struct {
 	Governor              string   `json:"governor"`
+	ActiveProfile         string   `json:"activeProfile"`
 	AvailableGovernors    []string `json:"availableGovernors"`
 	Driver                string   `json:"driver"`
 	CurrentFrequencyMHz   float64  `json:"currentFrequencyMHz"`
 	MinimumFrequencyMHz   float64  `json:"minimumFrequencyMHz"`
 	MaximumFrequencyMHz   float64  `json:"maximumFrequencyMHz"`
+	MaximumLimitMHz       float64  `json:"maximumLimitMHz"`
+	TurboAllowed          bool     `json:"turboAllowed"`
+	EcoMaximumPercent     int      `json:"ecoMaximumPercent"`
 	PlatformProfile       string   `json:"platformProfile"`
 	AvailableProfiles     []string `json:"availableProfiles"`
 	ControlSupported      bool     `json:"controlSupported"`

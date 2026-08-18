@@ -16,6 +16,7 @@ import (
 	"github.com/Massnaev/jinay-server-panel/agent/internal/audit"
 	"github.com/Massnaev/jinay-server-panel/agent/internal/auth"
 	"github.com/Massnaev/jinay-server-panel/agent/internal/config"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/powercontrol"
 )
 
 var version = "0.1.0-dev"
@@ -33,6 +34,8 @@ func main() {
 		err = serve(cfg)
 	case "user":
 		err = userCommand(cfg, os.Args[2:])
+	case "power":
+		err = powerCommand(cfg, os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(version)
 		return
@@ -42,6 +45,29 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func powerCommand(cfg config.Config, args []string) error {
+	if len(args) == 0 || args[0] != "apply" {
+		return fmt.Errorf("usage: serverpanel power apply --profile eco|balanced|turbo")
+	}
+	flags := flag.NewFlagSet("power apply", flag.ContinueOnError)
+	profile := flags.String("profile", "", "eco, balanced, or turbo")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	*profile = strings.ToLower(strings.TrimSpace(*profile))
+	if err := powercontrol.ValidateProfile(*profile); err != nil {
+		return fmt.Errorf("usage: serverpanel power apply --profile eco|balanced|turbo")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
+	defer cancel()
+	result, err := (powercontrol.Client{Enabled: cfg.EnablePowerActions, SocketPath: cfg.PowerHelperSocket}).Apply(ctx, *profile)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Applied %s: governor=%s max=%.0fMHz turbo=%t policies=%d\n", result.Profile, result.Governor, result.MaximumFrequencyMHz, result.TurboAllowed, result.PoliciesChanged)
+	return nil
 }
 
 func serve(cfg config.Config) error {

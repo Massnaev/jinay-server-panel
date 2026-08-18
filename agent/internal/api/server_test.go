@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,42 @@ import (
 	"github.com/Massnaev/jinay-server-panel/agent/internal/audit"
 	"github.com/Massnaev/jinay-server-panel/agent/internal/auth"
 	"github.com/Massnaev/jinay-server-panel/agent/internal/config"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/powercontrol"
 )
+
+type fakePowerController struct {
+	available bool
+	result    powercontrol.Result
+	err       error
+	calls     []string
+}
+
+func (f *fakePowerController) Available() bool { return f.available }
+func (f *fakePowerController) Apply(_ context.Context, profile string) (powercontrol.Result, error) {
+	f.calls = append(f.calls, profile)
+	return f.result, f.err
+}
+
+func loginAs(t *testing.T, server *Server, username, password string) (*http.Cookie, string) {
+	t.Helper()
+	body, err := json.Marshal(map[string]string{"username": username, "password": password})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("login failed: %d: %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		CSRFToken string `json:"csrfToken"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	return response.Result().Cookies()[0], payload.CSRFToken
+}
 
 func testServer(t *testing.T) *Server {
 	t.Helper()
@@ -31,13 +67,95 @@ func testServer(t *testing.T) *Server {
 
 func TestProtectedRouteNeedsAuthentication(t *testing.T) {
 	server := testServer(t)
-	for _, path := range []string{"/api/metrics", "/api/history?range=1h"} {
-		request := httptest.NewRequest(http.MethodGet, path, nil)
+	for _, test := range []struct{ method, path string }{{http.MethodGet, "/api/metrics"}, {http.MethodGet, "/api/history?range=1h"}, {http.MethodPost, "/api/power/profile"}} {
+		request := httptest.NewRequest(test.method, test.path, nil)
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, request)
 		if response.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401 for %s, got %d", path, response.Code)
+			t.Fatalf("expected 401 for %s, got %d", test.path, response.Code)
 		}
+	}
+}
+
+func TestPowerProfileRequiresCSRFAndAdminRole(t *testing.T) {
+	server := testServer(t)
+	if err := server.users.Add("operator", "operator", "correct horse battery staple"); err != nil {
+		t.Fatal(err)
+	}
+	controller := &fakePowerController{available: true}
+	server.config.EnablePowerActions = true
+	server.power = controller
+
+	adminCookie, _ := loginAs(t, server, "admin", "correct horse battery staple")
+	request := httptest.NewRequest(http.MethodPost, "/api/power/profile", strings.NewReader(`{"profile":"eco"}`))
+	request.AddCookie(adminCookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("missing CSRF should be forbidden, got %d", response.Code)
+	}
+
+	operatorCookie, operatorCSRF := loginAs(t, server, "operator", "correct horse battery staple")
+	request = httptest.NewRequest(http.MethodPost, "/api/power/profile", strings.NewReader(`{"profile":"eco"}`))
+	request.AddCookie(operatorCookie)
+	request.Header.Set("X-CSRF-Token", operatorCSRF)
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || len(controller.calls) != 0 {
+		t.Fatalf("operator must not control power: status=%d calls=%v", response.Code, controller.calls)
+	}
+}
+
+func TestPowerProfileValidationSuccessAndAudit(t *testing.T) {
+	server := testServer(t)
+	controller := &fakePowerController{available: true, result: powercontrol.Result{Profile: "eco", Governor: "schedutil", MaximumFrequencyMHz: 2340, TurboAllowed: false, PoliciesChanged: 32}}
+	server.config.EnablePowerActions = true
+	server.power = controller
+	cookie, csrf := loginAs(t, server, "admin", "correct horse battery staple")
+
+	request := httptest.NewRequest(http.MethodPost, "/api/power/profile", strings.NewReader(`{"profile":"custom"}`))
+	request.AddCookie(cookie)
+	request.Header.Set("X-CSRF-Token", csrf)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || len(controller.calls) != 0 {
+		t.Fatalf("invalid profile must be rejected before helper: status=%d calls=%v", response.Code, controller.calls)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/power/profile", strings.NewReader(`{"profile":"eco"}`))
+	request.AddCookie(cookie)
+	request.Header.Set("X-CSRF-Token", csrf)
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || len(controller.calls) != 1 || controller.calls[0] != "eco" {
+		t.Fatalf("expected applied eco profile: status=%d calls=%v body=%s", response.Code, controller.calls, response.Body.String())
+	}
+	entries, err := server.audit.Tail(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, entry := range entries {
+		if entry.Action == "power.profile" && entry.Target == "eco" && entry.Result == "allowed" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("successful power action was not audited: %+v", entries)
+	}
+
+	server.mu.Lock()
+	stale := server.sessions[cookie.Value]
+	stale.CreatedAt = time.Now().Add(-16 * time.Minute)
+	server.sessions[cookie.Value] = stale
+	server.mu.Unlock()
+	request = httptest.NewRequest(http.MethodPost, "/api/power/profile", strings.NewReader(`{"profile":"balanced"}`))
+	request.AddCookie(cookie)
+	request.Header.Set("X-CSRF-Token", csrf)
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusPreconditionRequired || len(controller.calls) != 1 {
+		t.Fatalf("stale session must reauthenticate: status=%d calls=%v", response.Code, controller.calls)
 	}
 }
 

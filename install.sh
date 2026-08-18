@@ -13,6 +13,7 @@ config_dir="/etc/serverpanel"
 service_user="serverpanel"
 tailscale_mode="${SERVERPANEL_TAILSCALE_SERVE:-auto}"
 auto_update_mode="${SERVERPANEL_AUTO_UPDATE:-off}"
+power_control_mode="${SERVERPANEL_POWER_CONTROL:-preserve}"
 
 fail() {
   printf 'Jinay installer: %s\n' "$1" >&2
@@ -23,6 +24,7 @@ fail() {
 [[ "${repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "invalid GitHub repository name"
 [[ "${tailscale_mode}" == "auto" || "${tailscale_mode}" == "off" ]] || fail "SERVERPANEL_TAILSCALE_SERVE must be auto or off"
 [[ "${auto_update_mode}" == "on" || "${auto_update_mode}" == "off" ]] || fail "SERVERPANEL_AUTO_UPDATE must be on or off"
+[[ "${power_control_mode}" == "preserve" || "${power_control_mode}" == "on" || "${power_control_mode}" == "off" ]] || fail "SERVERPANEL_POWER_CONTROL must be preserve, on or off"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 command -v systemctl >/dev/null 2>&1 || fail "systemd is required"
@@ -71,7 +73,9 @@ chmod 0755 "${release_dir}"
 tar --extract --gzip --file "${temporary_dir}/${asset}" --directory "${release_dir}" --no-same-owner
 
 [[ -x "${release_dir}/bin/serverpanel-agent" ]] || fail "release is missing bin/serverpanel-agent"
+[[ -x "${release_dir}/bin/serverpanel-power-helper" ]] || fail "release is missing bin/serverpanel-power-helper"
 [[ -f "${release_dir}/deploy/serverpanel-agent.service" ]] || fail "release is missing the agent systemd unit"
+[[ -f "${release_dir}/deploy/serverpanel-power-helper.service" ]] || fail "release is missing the power helper systemd unit"
 [[ -x "${release_dir}/deploy/jinay-update" ]] || fail "release is missing the verified updater"
 [[ -f "${release_dir}/deploy/jinay-update.service" ]] || fail "release is missing the updater systemd unit"
 [[ -f "${release_dir}/deploy/jinay-update.timer" ]] || fail "release is missing the updater timer"
@@ -92,14 +96,28 @@ if [[ ! -f "${config_dir}/serverpanel.env" ]]; then
     'SERVERPANEL_WEB_ROOT=/opt/serverpanel/current/web' \
     'SERVERPANEL_SECURE_COOKIES=true' \
     'SERVERPANEL_ENABLE_DOCKER_ACTIONS=false' \
+    'SERVERPANEL_ENABLE_POWER_ACTIONS=false' \
+    'SERVERPANEL_POWER_HELPER_SOCKET=/run/serverpanel-power/power.sock' \
     > "${config_dir}/serverpanel.env"
 fi
 if ! grep -q '^SERVERPANEL_WEB_ROOT=' "${config_dir}/serverpanel.env"; then
   printf '%s\n' 'SERVERPANEL_WEB_ROOT=/opt/serverpanel/current/web' >> "${config_dir}/serverpanel.env"
 fi
+if ! grep -q '^SERVERPANEL_ENABLE_POWER_ACTIONS=' "${config_dir}/serverpanel.env"; then
+  printf '%s\n' 'SERVERPANEL_ENABLE_POWER_ACTIONS=false' >> "${config_dir}/serverpanel.env"
+fi
+if ! grep -q '^SERVERPANEL_POWER_HELPER_SOCKET=' "${config_dir}/serverpanel.env"; then
+  printf '%s\n' 'SERVERPANEL_POWER_HELPER_SOCKET=/run/serverpanel-power/power.sock' >> "${config_dir}/serverpanel.env"
+fi
+if [[ "${power_control_mode}" == "on" ]]; then
+  sed -i 's/^SERVERPANEL_ENABLE_POWER_ACTIONS=.*/SERVERPANEL_ENABLE_POWER_ACTIONS=true/' "${config_dir}/serverpanel.env"
+elif [[ "${power_control_mode}" == "off" ]]; then
+  sed -i 's/^SERVERPANEL_ENABLE_POWER_ACTIONS=.*/SERVERPANEL_ENABLE_POWER_ACTIONS=false/' "${config_dir}/serverpanel.env"
+fi
 
 ln -sfn "${release_dir}" "${install_root}/current"
 install -m 0644 "${release_dir}/deploy/serverpanel-agent.service" /etc/systemd/system/serverpanel-agent.service
+install -m 0644 "${release_dir}/deploy/serverpanel-power-helper.service" /etc/systemd/system/serverpanel-power-helper.service
 install -m 0644 "${release_dir}/deploy/jinay-update.service" /etc/systemd/system/jinay-update.service
 install -m 0644 "${release_dir}/deploy/jinay-update.timer" /etc/systemd/system/jinay-update.timer
 if systemctl list-unit-files serverpanel-web.service --no-legend 2>/dev/null | grep -q '^serverpanel-web.service'; then
@@ -115,6 +133,12 @@ if [[ ! -s "${data_dir}/users.json" ]]; then
 fi
 
 systemctl daemon-reload
+if grep -q '^SERVERPANEL_ENABLE_POWER_ACTIONS=true$' "${config_dir}/serverpanel.env"; then
+  systemctl enable --now serverpanel-power-helper.service
+  systemctl restart serverpanel-power-helper.service
+else
+  systemctl disable --now serverpanel-power-helper.service >/dev/null 2>&1 || true
+fi
 systemctl enable --now serverpanel-agent.service
 systemctl restart serverpanel-agent.service
 if [[ "${auto_update_mode}" == "on" ]]; then
@@ -148,6 +172,12 @@ if systemctl is-enabled --quiet jinay-update.timer 2>/dev/null; then
 else
   printf '\nAutomatic release updates: disabled\n'
   printf 'Enable later: sudo systemctl enable --now jinay-update.timer\n'
+fi
+if systemctl is-active --quiet serverpanel-power-helper.service 2>/dev/null; then
+  printf '\nCPU power profiles: enabled (Eco, Balanced, Turbo)\n'
+else
+  printf '\nCPU power profiles: disabled\n'
+  printf 'Enable later: sudo env SERVERPANEL_POWER_CONTROL=on /opt/serverpanel/current/deploy/install.sh\n'
 fi
 printf '\nPanel URL:\n  %s\n' "${panel_url}"
 if [[ -n "${tailscale_message}" ]]; then

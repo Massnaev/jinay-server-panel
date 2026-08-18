@@ -18,6 +18,7 @@ import (
 	"github.com/Massnaev/jinay-server-panel/agent/internal/audit"
 	"github.com/Massnaev/jinay-server-panel/agent/internal/auth"
 	"github.com/Massnaev/jinay-server-panel/agent/internal/config"
+	"github.com/Massnaev/jinay-server-panel/agent/internal/powercontrol"
 	"github.com/Massnaev/jinay-server-panel/agent/internal/system"
 )
 
@@ -38,6 +39,7 @@ type Server struct {
 	config   config.Config
 	users    *auth.Store
 	docker   system.Docker
+	power    powerController
 	audit    *audit.Log
 	history  *system.HistoryStore
 	sessions map[string]session
@@ -46,9 +48,15 @@ type Server struct {
 	handler  http.Handler
 }
 
+type powerController interface {
+	Apply(context.Context, string) (powercontrol.Result, error)
+	Available() bool
+}
+
 func New(cfg config.Config, users *auth.Store, auditLog *audit.Log) *Server {
 	server := &Server{
 		config: cfg, users: users, docker: system.Docker{ActionsEnabled: cfg.EnableDockerActions},
+		power: powercontrol.Client{Enabled: cfg.EnablePowerActions, SocketPath: cfg.PowerHelperSocket},
 		audit: auditLog, history: system.NewHistoryStore(filepath.Join(cfg.DataDir, "metrics-history.jsonl")),
 		sessions: make(map[string]session), limits: make(map[string]loginWindow),
 	}
@@ -61,6 +69,7 @@ func New(cfg config.Config, users *auth.Store, auditLog *audit.Log) *Server {
 	mux.HandleFunc("GET /api/history", server.metricHistory)
 	mux.HandleFunc("GET /api/containers", server.containers)
 	mux.HandleFunc("POST /api/containers/{id}/{action}", server.containerAction)
+	mux.HandleFunc("POST /api/power/profile", server.powerProfile)
 	mux.HandleFunc("GET /api/diagnostics", server.diagnostics)
 	mux.HandleFunc("GET /api/audit", server.auditEntries)
 	mux.HandleFunc("GET /", server.webUI)
@@ -174,10 +183,27 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
+	s.decoratePowerInfo(&metrics.Power)
 	if err := s.history.Append(system.HistoryPointFromMetrics(metrics)); err != nil {
 		slog.Warn("store metric history", "error", err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"metrics": metrics, "usage": system.UsageSummary(metrics), "agentVersion": s.config.Version})
+}
+
+func (s *Server) decoratePowerInfo(info *system.PowerInfo) {
+	if !s.config.EnablePowerActions {
+		info.ControlSupported = false
+		info.ControlDisabledReason = "Power profile switching is disabled by configuration."
+		return
+	}
+	if !s.power.Available() {
+		info.ControlSupported = false
+		info.ControlDisabledReason = "The least-privilege power helper is unavailable."
+		return
+	}
+	if !info.ControlSupported && info.ControlDisabledReason == "" {
+		info.ControlDisabledReason = "The CPU frequency driver does not expose the required safe controls."
+	}
 }
 
 func (s *Server) metricHistory(w http.ResponseWriter, r *http.Request) {
@@ -255,6 +281,55 @@ func (s *Server) containerAction(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.audit.Append(entry)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "completed"})
+}
+
+func (s *Server) powerProfile(w http.ResponseWriter, r *http.Request) {
+	current, _, ok := s.requireSession(w, r)
+	if !ok || !s.requireCSRF(w, r, current) {
+		return
+	}
+	entry := audit.Entry{Actor: current.User.Username, Action: "power.profile", RemoteIP: clientIP(r), Result: "denied"}
+	if current.User.Role != "admin" {
+		entry.Detail = "administrator role required"
+		_ = s.audit.Append(entry)
+		writeError(w, http.StatusForbidden, "Only administrators can change power profiles.")
+		return
+	}
+	if time.Since(current.CreatedAt) > 15*time.Minute {
+		entry.Detail = "recent authentication required"
+		_ = s.audit.Append(entry)
+		writeError(w, http.StatusPreconditionRequired, "Sign in again before changing the power profile.")
+		return
+	}
+	var input struct {
+		Profile string `json:"profile"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		return
+	}
+	input.Profile = strings.ToLower(strings.TrimSpace(input.Profile))
+	entry.Target = input.Profile
+	if err := powercontrol.ValidateProfile(input.Profile); err != nil {
+		entry.Detail = "unsupported profile"
+		_ = s.audit.Append(entry)
+		writeError(w, http.StatusBadRequest, "Power profile must be eco, balanced, or turbo.")
+		return
+	}
+	result, err := s.power.Apply(r.Context(), input.Profile)
+	if err != nil {
+		entry.Detail = err.Error()
+		_ = s.audit.Append(entry)
+		status := http.StatusFailedDependency
+		if errors.Is(err, powercontrol.ErrDisabled) || strings.Contains(err.Error(), "unsupported") {
+			status = http.StatusForbidden
+		}
+		writeError(w, status, "Power profile could not be applied. The previous settings were preserved or restored.")
+		return
+	}
+	entry.Result = "allowed"
+	entry.Detail = fmt.Sprintf("governor=%s max=%.0fMHz turbo=%t policies=%d", result.Governor, result.MaximumFrequencyMHz, result.TurboAllowed, result.PoliciesChanged)
+	_ = s.audit.Append(entry)
+	writeJSON(w, http.StatusOK, map[string]any{"status": "completed", "result": result})
 }
 
 func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {

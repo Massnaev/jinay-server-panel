@@ -159,3 +159,24 @@ func TestPowerValueSummary(t *testing.T) {
 		t.Fatalf("unexpected average %f", got)
 	}
 }
+
+func TestDetectedPowerProfiles(t *testing.T) {
+	tests := []struct {
+		governor                 string
+		maximum, hardwareMaximum float64
+		turboAllowed             bool
+		want                     string
+	}{
+		{"schedutil", 2340, 3600, false, "eco"},
+		{"schedutil", 2340, 3600, true, "eco"},
+		{"schedutil", 3600, 3600, true, "balanced"},
+		{"performance", 3600, 3600, true, "turbo"},
+		{"powersave", 3000, 3600, true, "custom"},
+		{"unavailable", 0, 0, true, "unknown"},
+	}
+	for _, test := range tests {
+		if got := detectedPowerProfile(test.governor, test.maximum, test.hardwareMaximum, test.turboAllowed); got != test.want {
+			t.Fatalf("detectedPowerProfile(%q, %.0f, %.0f, %t)=%q, want %q", test.governor, test.maximum, test.hardwareMaximum, test.turboAllowed, got, test.want)
+		}
+	}
+}

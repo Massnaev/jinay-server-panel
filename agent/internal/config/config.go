@@ -14,6 +14,8 @@ type Config struct {
 	WebRoot             string
 	SecureCookies       bool
 	EnableDockerActions bool
+	EnablePowerActions  bool
+	PowerHelperSocket   string
 	SessionTTL          time.Duration
 }
 
@@ -25,6 +27,8 @@ func FromEnv() Config {
 		WebRoot:             env("SERVERPANEL_WEB_ROOT", filepath.Join(".", "web")),
 		SecureCookies:       envBool("SERVERPANEL_SECURE_COOKIES", true),
 		EnableDockerActions: envBool("SERVERPANEL_ENABLE_DOCKER_ACTIONS", false),
+		EnablePowerActions:  envBool("SERVERPANEL_ENABLE_POWER_ACTIONS", false),
+		PowerHelperSocket:   env("SERVERPANEL_POWER_HELPER_SOCKET", "/run/serverpanel-power/power.sock"),
 		SessionTTL:          12 * time.Hour,
 	}
 }
