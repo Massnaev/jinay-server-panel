@@ -25,10 +25,11 @@
 ## Phase 2 — power and hardware
 
 - [x] Read-only detection of power-profile, CPU governor, temperature and fan interfaces
-- [ ] Eco, balanced and turbo profiles with measured before/after impact
+- [x] Opt-in Eco, balanced and turbo CPUFreq profiles with verification and automatic rollback
+- [ ] Measured wall-power and temperature comparison for each supported server platform
 - [ ] Hardware-specific IPMI/Redfish integration
 - [ ] Fan-control support only for detected and explicitly supported hardware
-- [ ] Safety limits, automatic rollback and thermal shutdown protections
+- [ ] Hardware fan safety limits and thermal shutdown protections
 
 ## Phase 3 — Codex and AI operations
 

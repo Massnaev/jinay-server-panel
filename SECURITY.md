@@ -13,7 +13,7 @@ Jinay is a privileged administration surface. A flaw can affect the entire host,
 7. Codex credentials, API keys and generated passwords never enter browser storage or Git.
 8. Codex App Server is never exposed directly to a shared or public network.
 9. Destructive operations require confirmation and recent reauthentication.
-10. Hardware controls are unavailable until the exact platform is detected and tested.
+10. CPU power control is disabled by default and restricted to three typed profiles through a Unix-only least-privilege helper with verification and rollback; all other hardware controls remain unavailable until the exact platform is detected and tested.
 11. The Go router serves only typed API routes and an explicit static-file path allowlist.
 12. Automatic Tailscale setup uses Serve only; the installer never enables public Funnel exposure.
 13. Automatic updates are opt-in, follow published releases only, verify the release SHA-256, and invoke the installer bundled in the already verified local release.
@@ -22,6 +22,8 @@ Jinay is a privileged administration surface. A flaw can affect the entire host,
 The production host serves prebuilt static assets; Node.js, Vite and Vinext are build-time dependencies only. The Go agent retains `MemoryDenyWriteExecute=true`.
 
 The optional `jinay-update.timer` runs as root because installing a system release requires writing under `/opt` and restarting the agent. Its service has a fixed executable path and repository, accepts no browser input, and does not pipe a newly downloaded script into a shell. It is disabled unless the operator explicitly enables it, and it refuses to replace `main-*` or development snapshots automatically. A compromised GitHub release remains a supply-chain risk until signed artifacts are implemented.
+
+The optional `serverpanel-power-helper.service` runs as root but listens only on a mode-`0660` Unix socket owned by the `serverpanel` group. Its systemd sandbox denies network address families and gives write access only to CPUFreq/Intel P-state sysfs paths plus its root-owned state directory. The browser cannot provide a path, numeric limit, governor, or command. Power actions require an administrator, CSRF validation, confirmation, and a session created in the last 15 minutes.
 
 ## Deployment baseline
 

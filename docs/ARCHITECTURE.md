@@ -10,7 +10,9 @@ The React interface is exported to static HTML, CSS and JavaScript during the tr
 
 The agent is the only component allowed to inspect host telemetry or request an operational action. It listens on loopback or a Unix socket, validates the session and CSRF token, checks the caller role, validates typed parameters, executes a fixed command, and appends an audit event.
 
-Read-only hardware telemetry includes swap, CPU frequency policy, ACPI platform-profile availability, hwmon temperatures, fan RPM, physical block-device inventory, mounted-filesystem capacity, and the presence of PWM interfaces. Disk serial numbers are not sent to the browser. Detection never implies authorization to write. SMART access, power-profile and fan mutation routes do not exist until a platform-specific least-privilege helper, safety limits, confirmation, audit, and automatic rollback are implemented and validated on the target hardware.
+Read-only hardware telemetry includes swap, CPU frequency policy, ACPI platform-profile availability, hwmon temperatures, fan RPM, physical block-device inventory, mounted-filesystem capacity, and the presence of PWM interfaces. Disk serial numbers are not sent to the browser. Detection never implies authorization to write. SMART and fan mutation routes remain absent.
+
+CPU power profiles are the first opt-in hardware mutation. The unprivileged agent sends one validated enum (`eco`, `balanced`, or `turbo`) over `/run/serverpanel-power/power.sock` to a separate root helper. That helper can write only CPUFreq and Intel Turbo sysfs controls, snapshots every policy, verifies the result, rolls back on failure, and persists the selected profile in a root-owned state directory for reboot recovery. It has no network listener, shell, Docker access, or browser-controlled path/value.
 
 ### Same-origin API
 
@@ -36,6 +38,7 @@ OpenAI authentication is owned by Codex using `codex login` or device-code login
 | Browser session to agent | Request headers/body | Loopback agent | Typed routes, 64 KiB JSON limit, session, CSRF and roles |
 | Browser session to action | User input | Agent operation | Session, role, CSRF, reauth |
 | Agent to host | Typed action | OS/Docker | Allowlist, no shell, timeout |
+| Agent to CPU power helper | Three-value profile enum | Root-owned sysfs writer | Opt-in config, Unix socket, admin role, recent auth, snapshot, verification, rollback |
 | Release updater to host | Published GitHub release | Root filesystem and systemd | Opt-in timer, fixed local script, version validation, SHA-256 |
 | Panel to Codex | Prompt/tool request | Codex workspace | Sandbox, approvals, budgets |
 | Codex to secrets | Agent process | Credential store | Dedicated account, file modes |
@@ -49,10 +52,11 @@ OpenAI authentication is owned by Codex using `codex login` or device-code login
 - `GET /api/history?range={1h|24h}`
 - `GET /api/containers`
 - `POST /api/containers/{id}/{start|stop|restart}`
+- `POST /api/power/profile` with `{ "profile": "eco" | "balanced" | "turbo" }`
 - `GET /api/diagnostics`
 - `GET /api/audit`
 
-Power, fan and AI mutation endpoints are deliberately excluded until their platform-specific safety controls exist.
+Fan and AI mutation endpoints are deliberately excluded until their platform-specific safety controls exist.
 
 ## Data model
 

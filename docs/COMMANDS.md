@@ -16,6 +16,12 @@ Enable release auto-updates during installation:
 curl -fsSL https://raw.githubusercontent.com/Massnaev/jinay-server-panel/main/install.sh | sudo env SERVERPANEL_AUTO_UPDATE=on bash
 ```
 
+Enable CPU power profiles during installation (they are off by default):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Massnaev/jinay-server-panel/main/install.sh | sudo env SERVERPANEL_POWER_CONTROL=on bash
+```
+
 The installer prints the panel URL and, on first installation only, the generated `admin` password. Store that password immediately; Jinay stores only its verifier and cannot display it again.
 
 ## Status and logs
@@ -25,6 +31,7 @@ sudo systemctl status serverpanel-agent.service
 sudo journalctl -u serverpanel-agent.service -n 100 --no-pager
 curl http://127.0.0.1:9080/healthz
 /opt/serverpanel/current/bin/serverpanel-agent version
+sudo systemctl status serverpanel-power-helper.service
 ```
 
 ## Accounts
@@ -45,6 +52,25 @@ sudo systemctl restart serverpanel-agent.service
 ```
 
 Valid roles are `admin`, `operator`, and `viewer`.
+
+## CPU power profiles
+
+The panel is the normal control surface. For local verification or recovery, apply one typed profile through the same Unix-socket helper:
+
+```bash
+sudo -u serverpanel env SERVERPANEL_ENABLE_POWER_ACTIONS=true SERVERPANEL_POWER_HELPER_SOCKET=/run/serverpanel-power/power.sock /opt/serverpanel/current/bin/serverpanel-agent power apply --profile eco
+sudo -u serverpanel env SERVERPANEL_ENABLE_POWER_ACTIONS=true SERVERPANEL_POWER_HELPER_SOCKET=/run/serverpanel-power/power.sock /opt/serverpanel/current/bin/serverpanel-agent power apply --profile balanced
+sudo -u serverpanel env SERVERPANEL_ENABLE_POWER_ACTIONS=true SERVERPANEL_POWER_HELPER_SOCKET=/run/serverpanel-power/power.sock /opt/serverpanel/current/bin/serverpanel-agent power apply --profile turbo
+```
+
+Disable or re-enable the capability by rerunning the verified bundled installer:
+
+```bash
+sudo env SERVERPANEL_POWER_CONTROL=off /opt/serverpanel/current/deploy/install.sh
+sudo env SERVERPANEL_POWER_CONTROL=on /opt/serverpanel/current/deploy/install.sh
+```
+
+Read [CPU power profiles](POWER.md) before using Turbo or diagnosing unsupported hardware.
 
 ## Automatic updates
 
@@ -96,6 +122,7 @@ Rollback requires choosing one exact directory from that list, then switching th
 ```bash
 sudo ln -sfn /opt/serverpanel/releases/EXACT_VERSION /opt/serverpanel/current
 sudo systemctl restart serverpanel-agent.service
+sudo systemctl restart serverpanel-power-helper.service
 ```
 
 Never paste a server address, generated password, API key, private log, or token into a GitHub issue.
