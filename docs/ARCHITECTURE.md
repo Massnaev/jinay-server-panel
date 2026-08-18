@@ -46,6 +46,7 @@ OpenAI authentication is owned by Codex using `codex login` or device-code login
 - `POST /api/auth/logout`
 - `GET /api/session`
 - `GET /api/metrics`
+- `GET /api/history?range={1h|24h}`
 - `GET /api/containers`
 - `POST /api/containers/{id}/{start|stop|restart}`
 - `GET /api/diagnostics`
@@ -55,4 +56,4 @@ Power, fan and AI mutation endpoints are deliberately excluded until their platf
 
 ## Data model
 
-The MVP stores user password verifiers, roles, sessions and audit events locally. Passwords are never stored. The first production persistence implementation must support atomic writes, strict file permissions, backups, migrations and bounded audit retention.
+The MVP stores user password verifiers, roles, sessions, audit events and a bounded 24-hour metric history locally. Passwords are never stored. Metric history is sampled every 30 seconds, kept in a mode-`0600` JSONL file, capped in memory and downsampled to at most 720 points per API response. History collection contains resource measurements but no credentials, command output or process names. The first production persistence implementation must support backups, migrations and bounded audit retention.

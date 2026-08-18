@@ -13,7 +13,7 @@
 
 ## Phase 1 — useful server operations
 
-- [ ] Live CPU, RAM, load, disks, network and temperature history
+- [x] Live CPU, RAM, load, disks, network and temperature history
 - [ ] Docker inventory, logs and opt-in start/stop/restart
 - [ ] Service health, panel errors and actionable recommendations
 - [ ] Roles: administrator, operator and read-only viewer

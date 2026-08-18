@@ -31,11 +31,13 @@ func testServer(t *testing.T) *Server {
 
 func TestProtectedRouteNeedsAuthentication(t *testing.T) {
 	server := testServer(t)
-	request := httptest.NewRequest(http.MethodGet, "/api/metrics", nil)
-	response := httptest.NewRecorder()
-	server.Handler().ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", response.Code)
+	for _, path := range []string{"/api/metrics", "/api/history?range=1h"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 for %s, got %d", path, response.Code)
+		}
 	}
 }
 
@@ -122,5 +124,21 @@ func TestLoginSessionAndCSRF(t *testing.T) {
 	}
 	if metricsBody.AgentVersion != "test-version" {
 		t.Fatalf("expected synchronized agent version, got %q", metricsBody.AgentVersion)
+	}
+
+	historyRequest := httptest.NewRequest(http.MethodGet, "/api/history?range=1h", nil)
+	historyRequest.AddCookie(cookies[0])
+	historyResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(historyResponse, historyRequest)
+	if historyResponse.Code != http.StatusOK || !strings.Contains(historyResponse.Body.String(), `"points":[{`) {
+		t.Fatalf("expected persisted history point, got %d: %s", historyResponse.Code, historyResponse.Body.String())
+	}
+
+	invalidHistory := httptest.NewRequest(http.MethodGet, "/api/history?range=week", nil)
+	invalidHistory.AddCookie(cookies[0])
+	invalidHistoryResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(invalidHistoryResponse, invalidHistory)
+	if invalidHistoryResponse.Code != http.StatusBadRequest {
+		t.Fatalf("invalid history range should be rejected, got %d", invalidHistoryResponse.Code)
 	}
 }

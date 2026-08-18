@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -56,6 +57,7 @@ func serve(cfg config.Config) error {
 	}
 	auditLog := audit.New(filepath.Join(cfg.DataDir, "audit.jsonl"))
 	server := api.New(cfg, users, auditLog)
+	server.StartHistoryCollector(context.Background(), 30*time.Second)
 	httpServer := &http.Server{
 		Addr: cfg.Listen, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second,

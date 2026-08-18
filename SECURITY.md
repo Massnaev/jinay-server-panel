@@ -17,6 +17,7 @@ Jinay is a privileged administration surface. A flaw can affect the entire host,
 11. The Go router serves only typed API routes and an explicit static-file path allowlist.
 12. Automatic Tailscale setup uses Serve only; the installer never enables public Funnel exposure.
 13. Automatic updates are opt-in, follow published releases only, verify the release SHA-256, and invoke the installer bundled in the already verified local release.
+14. Metric history is authenticated, bounded to 24 hours, stored under the private service data directory, and never includes credentials or arbitrary command output.
 
 The production host serves prebuilt static assets; Node.js, Vite and Vinext are build-time dependencies only. The Go agent retains `MemoryDenyWriteExecute=true`.
 

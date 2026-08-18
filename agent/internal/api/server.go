@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -38,6 +39,7 @@ type Server struct {
 	users    *auth.Store
 	docker   system.Docker
 	audit    *audit.Log
+	history  *system.HistoryStore
 	sessions map[string]session
 	limits   map[string]loginWindow
 	mu       sync.Mutex
@@ -47,7 +49,8 @@ type Server struct {
 func New(cfg config.Config, users *auth.Store, auditLog *audit.Log) *Server {
 	server := &Server{
 		config: cfg, users: users, docker: system.Docker{ActionsEnabled: cfg.EnableDockerActions},
-		audit: auditLog, sessions: make(map[string]session), limits: make(map[string]loginWindow),
+		audit: auditLog, history: system.NewHistoryStore(filepath.Join(cfg.DataDir, "metrics-history.jsonl")),
+		sessions: make(map[string]session), limits: make(map[string]loginWindow),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
@@ -55,6 +58,7 @@ func New(cfg config.Config, users *auth.Store, auditLog *audit.Log) *Server {
 	mux.HandleFunc("POST /api/auth/logout", server.logout)
 	mux.HandleFunc("GET /api/session", server.currentSession)
 	mux.HandleFunc("GET /api/metrics", server.metrics)
+	mux.HandleFunc("GET /api/history", server.metricHistory)
 	mux.HandleFunc("GET /api/containers", server.containers)
 	mux.HandleFunc("POST /api/containers/{id}/{action}", server.containerAction)
 	mux.HandleFunc("GET /api/diagnostics", server.diagnostics)
@@ -65,6 +69,25 @@ func New(cfg config.Config, users *auth.Store, auditLog *audit.Log) *Server {
 }
 
 func (s *Server) Handler() http.Handler { return s.handler }
+
+func (s *Server) StartHistoryCollector(ctx context.Context, interval time.Duration) {
+	if interval < 20*time.Second {
+		interval = 30 * time.Second
+	}
+	go func() {
+		s.collectHistoryPoint()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.collectHistoryPoint()
+			}
+		}
+	}()
+}
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC()})
@@ -151,7 +174,44 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
+	if err := s.history.Append(system.HistoryPointFromMetrics(metrics)); err != nil {
+		slog.Warn("store metric history", "error", err)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"metrics": metrics, "usage": system.UsageSummary(metrics), "agentVersion": s.config.Version})
+}
+
+func (s *Server) metricHistory(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := s.requireSession(w, r); !ok {
+		return
+	}
+	rangeName := r.URL.Query().Get("range")
+	var duration time.Duration
+	switch rangeName {
+	case "", "1h":
+		rangeName, duration = "1h", time.Hour
+	case "24h":
+		duration = 24 * time.Hour
+	default:
+		writeError(w, http.StatusBadRequest, "History range must be 1h or 24h.")
+		return
+	}
+	points, err := s.history.ReadSince(time.Now().UTC().Add(-duration), 720)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not read metric history.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"range": rangeName, "points": points})
+}
+
+func (s *Server) collectHistoryPoint() {
+	metrics, err := system.ReadMetrics()
+	if err != nil {
+		slog.Warn("collect metric history", "error", err)
+		return
+	}
+	if err := s.history.Append(system.HistoryPointFromMetrics(metrics)); err != nil {
+		slog.Warn("store metric history", "error", err)
+	}
 }
 
 func (s *Server) containers(w http.ResponseWriter, r *http.Request) {
