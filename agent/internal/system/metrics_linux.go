@@ -77,6 +77,7 @@ func ReadMetrics() (Metrics, error) {
 	metrics.Temperatures = readTemperatures()
 	metrics.Fans = readFans()
 	metrics.Power = readPowerInfo()
+	metrics.StorageDevices = readStorageDevices()
 	return metrics, nil
 }
 
@@ -279,6 +280,183 @@ func readGPUTemperature(devicePath string) float64 {
 		}
 	}
 	return 0
+}
+
+type mountRecord struct {
+	MajorMinor string
+	Path       string
+	FileSystem string
+}
+
+func readStorageDevices() []StorageDevice {
+	paths, _ := filepath.Glob("/sys/block/*")
+	devices := make(map[string]*StorageDevice)
+	for _, path := range paths {
+		name := filepath.Base(path)
+		if !isPhysicalBlockName(name) {
+			continue
+		}
+		sectors, err := strconv.ParseUint(readTrimmed(filepath.Join(path, "size")), 10, 64)
+		if err != nil || sectors == 0 {
+			continue
+		}
+		rotational := readTrimmed(filepath.Join(path, "queue", "rotational")) == "1"
+		device := &StorageDevice{
+			Name: name, Model: readTrimmed(filepath.Join(path, "device", "model")),
+			Vendor: readTrimmed(filepath.Join(path, "device", "vendor")), Kind: storageKind(name, rotational),
+			SizeBytes: sectors * 512, Rotational: rotational, Removable: readTrimmed(filepath.Join(path, "removable")) == "1",
+			TemperatureCelsius: readStorageTemperature(path), SmartStatus: "unavailable",
+			SmartReason: "SMART requires a separate read-only privileged helper; Jinay does not open raw block devices in the MVP.",
+			Mounts:      []StorageMount{},
+		}
+		if device.Model == "" {
+			device.Model = name
+		}
+		devices[name] = device
+	}
+
+	content, _ := os.ReadFile("/proc/self/mountinfo")
+	seenMounts := make(map[string]struct{})
+	for _, mount := range parseMountInfo(string(content)) {
+		parents := blockParentsForMajorMinor(mount.MajorMinor)
+		if len(parents) == 0 {
+			continue
+		}
+		total, used := readMountUsage(mount.Path)
+		for _, parent := range parents {
+			device := devices[parent]
+			key := parent + "\x00" + mount.Path
+			if device == nil {
+				continue
+			}
+			if _, exists := seenMounts[key]; exists {
+				continue
+			}
+			seenMounts[key] = struct{}{}
+			device.Mounts = append(device.Mounts, StorageMount{Path: mount.Path, FileSystem: mount.FileSystem, TotalBytes: total, UsedBytes: used})
+		}
+	}
+
+	result := make([]StorageDevice, 0, len(devices))
+	for _, device := range devices {
+		sort.Slice(device.Mounts, func(i, j int) bool { return device.Mounts[i].Path < device.Mounts[j].Path })
+		result = append(result, *device)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
+}
+
+func isPhysicalBlockName(name string) bool {
+	return strings.HasPrefix(name, "sd") || strings.HasPrefix(name, "nvme") || strings.HasPrefix(name, "vd") ||
+		strings.HasPrefix(name, "xvd") || strings.HasPrefix(name, "mmcblk")
+}
+
+func storageKind(name string, rotational bool) string {
+	if strings.HasPrefix(name, "nvme") {
+		return "NVMe"
+	}
+	if rotational {
+		return "HDD"
+	}
+	return "SSD"
+}
+
+func readStorageTemperature(blockPath string) float64 {
+	patterns := []string{
+		filepath.Join(blockPath, "device", "hwmon", "hwmon*", "temp*_input"),
+		filepath.Join(blockPath, "device", "device", "hwmon", "hwmon*", "temp*_input"),
+	}
+	for _, pattern := range patterns {
+		paths, _ := filepath.Glob(pattern)
+		for _, path := range paths {
+			milliCelsius, err := strconv.ParseFloat(readTrimmed(path), 64)
+			if err == nil && milliCelsius > 0 && milliCelsius <= 120_000 {
+				return milliCelsius / 1000
+			}
+		}
+	}
+	return 0
+}
+
+func parseMountInfo(content string) []mountRecord {
+	records := []mountRecord{}
+	for _, line := range strings.Split(content, "\n") {
+		fields := strings.Fields(line)
+		separator := -1
+		for index, field := range fields {
+			if field == "-" {
+				separator = index
+				break
+			}
+		}
+		if len(fields) < 6 || separator < 0 || separator+2 >= len(fields) {
+			continue
+		}
+		records = append(records, mountRecord{MajorMinor: fields[2], Path: decodeMountPath(fields[4]), FileSystem: fields[separator+1]})
+	}
+	return records
+}
+
+func decodeMountPath(value string) string {
+	replacer := strings.NewReplacer("\\040", " ", "\\011", "\t", "\\012", "\n", "\\134", "\\")
+	return replacer.Replace(value)
+}
+
+func blockParentsForMajorMinor(majorMinor string) []string {
+	resolved, err := filepath.EvalSymlinks(filepath.Join("/sys/dev/block", majorMinor))
+	if err != nil {
+		return nil
+	}
+	return physicalBlockParents(filepath.Base(resolved), make(map[string]struct{}))
+}
+
+func physicalBlockParents(name string, visited map[string]struct{}) []string {
+	if _, exists := visited[name]; exists {
+		return nil
+	}
+	visited[name] = struct{}{}
+	classPath := filepath.Join("/sys/class/block", name)
+	slaves, _ := filepath.Glob(filepath.Join(classPath, "slaves", "*"))
+	if len(slaves) > 0 {
+		parents := []string{}
+		for _, slave := range slaves {
+			parents = append(parents, physicalBlockParents(filepath.Base(slave), visited)...)
+		}
+		return uniqueStrings(parents)
+	}
+	if _, err := os.Stat(filepath.Join(classPath, "partition")); err == nil {
+		resolved, err := filepath.EvalSymlinks(classPath)
+		if err == nil {
+			return physicalBlockParents(filepath.Base(filepath.Dir(resolved)), visited)
+		}
+	}
+	if isPhysicalBlockName(name) {
+		return []string{name}
+	}
+	return nil
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func readMountUsage(path string) (uint64, uint64) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0, 0
+	}
+	total := stat.Blocks * uint64(stat.Bsize)
+	available := stat.Bavail * uint64(stat.Bsize)
+	return total, total - available
 }
 
 type cpuStats struct {

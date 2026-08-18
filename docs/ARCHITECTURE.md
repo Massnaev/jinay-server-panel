@@ -10,7 +10,7 @@ The React interface is exported to static HTML, CSS and JavaScript during the tr
 
 The agent is the only component allowed to inspect host telemetry or request an operational action. It listens on loopback or a Unix socket, validates the session and CSRF token, checks the caller role, validates typed parameters, executes a fixed command, and appends an audit event.
 
-Read-only hardware telemetry includes swap, CPU frequency policy, ACPI platform-profile availability, hwmon temperatures, fan RPM, and the presence of PWM interfaces. Detection never implies authorization to write. Power-profile and fan mutation routes do not exist until a platform-specific helper, thermal limits, confirmation, audit, and automatic rollback are implemented and validated on the target hardware.
+Read-only hardware telemetry includes swap, CPU frequency policy, ACPI platform-profile availability, hwmon temperatures, fan RPM, physical block-device inventory, mounted-filesystem capacity, and the presence of PWM interfaces. Disk serial numbers are not sent to the browser. Detection never implies authorization to write. SMART access, power-profile and fan mutation routes do not exist until a platform-specific least-privilege helper, safety limits, confirmation, audit, and automatic rollback are implemented and validated on the target hardware.
 
 ### Same-origin API
 

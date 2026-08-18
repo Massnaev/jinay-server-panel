@@ -14,6 +14,8 @@
 ## Phase 1 — useful server operations
 
 - [x] Live CPU, RAM, load, disks, network and temperature history
+- [x] Physical disk inventory and mounted-filesystem capacity
+- [ ] Read-only SMART health through a least-privilege helper
 - [ ] Docker inventory, logs and opt-in start/stop/restart
 - [ ] Service health, panel errors and actionable recommendations
 - [ ] Roles: administrator, operator and read-only viewer

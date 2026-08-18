@@ -30,6 +30,7 @@ func ReadMetrics() (Metrics, error) {
 		MemoryUsedBytes:  memory.Alloc,
 		Temperatures:     []Temperature{},
 		Fans:             []Fan{},
+		StorageDevices:   []StorageDevice{},
 		Power: PowerInfo{
 			Governor:              "unavailable",
 			Driver:                "unavailable",

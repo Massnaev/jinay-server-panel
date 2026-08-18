@@ -84,6 +84,40 @@ func TestCounterRate(t *testing.T) {
 	}
 }
 
+func TestParseMountInfo(t *testing.T) {
+	content := "36 25 8:2 / / rw,relatime - ext4 /dev/sda2 rw\n41 36 8:2 /data\\040set /srv/data\\040set rw - ext4 /dev/sda2 rw\ninvalid row\n"
+	records := parseMountInfo(content)
+	if len(records) != 2 {
+		t.Fatalf("expected two mount records, got %+v", records)
+	}
+	if records[0].MajorMinor != "8:2" || records[0].Path != "/" || records[0].FileSystem != "ext4" {
+		t.Fatalf("unexpected root mount: %+v", records[0])
+	}
+	if records[1].Path != "/srv/data set" {
+		t.Fatalf("mount escape was not decoded: %+v", records[1])
+	}
+}
+
+func TestStorageDeviceClassification(t *testing.T) {
+	tests := []struct {
+		name       string
+		rotational bool
+		want       string
+	}{
+		{name: "nvme0n1", want: "NVMe"},
+		{name: "sda", want: "SSD"},
+		{name: "sdb", rotational: true, want: "HDD"},
+	}
+	for _, test := range tests {
+		if got := storageKind(test.name, test.rotational); got != test.want {
+			t.Fatalf("storageKind(%q)=%q, want %q", test.name, got, test.want)
+		}
+	}
+	if isPhysicalBlockName("loop0") || !isPhysicalBlockName("vda") || !isPhysicalBlockName("mmcblk0") {
+		t.Fatal("physical block name filter returned an unexpected result")
+	}
+}
+
 func TestParsePCIDeviceName(t *testing.T) {
 	content := "# PCI IDs\n10de  NVIDIA Corporation\n\t0615  G92 [GeForce GTS 250]\n\t\t1462 1542  Board\n1002  AMD\n\t73bf  Navi 21\n"
 	if got := parsePCIDeviceName(content, "10de", "0615"); got != "G92 [GeForce GTS 250]" {

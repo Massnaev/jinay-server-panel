@@ -53,6 +53,27 @@ type GPUInfo struct {
 	TemperatureCelsius float64 `json:"temperatureCelsius,omitempty"`
 }
 
+type StorageMount struct {
+	Path       string `json:"path"`
+	FileSystem string `json:"fileSystem"`
+	TotalBytes uint64 `json:"totalBytes"`
+	UsedBytes  uint64 `json:"usedBytes"`
+}
+
+type StorageDevice struct {
+	Name               string         `json:"name"`
+	Model              string         `json:"model"`
+	Vendor             string         `json:"vendor"`
+	Kind               string         `json:"kind"`
+	SizeBytes          uint64         `json:"sizeBytes"`
+	Rotational         bool           `json:"rotational"`
+	Removable          bool           `json:"removable"`
+	TemperatureCelsius float64        `json:"temperatureCelsius,omitempty"`
+	SmartStatus        string         `json:"smartStatus"`
+	SmartReason        string         `json:"smartReason"`
+	Mounts             []StorageMount `json:"mounts"`
+}
+
 type SystemInfo struct {
 	OSName             string          `json:"osName"`
 	KernelVersion      string          `json:"kernelVersion"`
@@ -67,25 +88,26 @@ type SystemInfo struct {
 }
 
 type Metrics struct {
-	Timestamp         time.Time     `json:"timestamp"`
-	Hostname          string        `json:"hostname"`
-	Platform          string        `json:"platform"`
-	System            SystemInfo    `json:"system"`
-	CPUCount          int           `json:"cpuCount"`
-	CPUPercent        float64       `json:"cpuPercent"`
-	Load              [3]float64    `json:"load"`
-	MemoryTotalBytes  uint64        `json:"memoryTotalBytes"`
-	MemoryUsedBytes   uint64        `json:"memoryUsedBytes"`
-	SwapTotalBytes    uint64        `json:"swapTotalBytes"`
-	SwapUsedBytes     uint64        `json:"swapUsedBytes"`
-	DiskTotalBytes    uint64        `json:"diskTotalBytes"`
-	DiskUsedBytes     uint64        `json:"diskUsedBytes"`
-	Network           Network       `json:"network"`
-	Temperatures      []Temperature `json:"temperatures"`
-	Fans              []Fan         `json:"fans"`
-	Power             PowerInfo     `json:"power"`
-	UptimeSeconds     float64       `json:"uptimeSeconds"`
-	CollectionWarning string        `json:"collectionWarning,omitempty"`
+	Timestamp         time.Time       `json:"timestamp"`
+	Hostname          string          `json:"hostname"`
+	Platform          string          `json:"platform"`
+	System            SystemInfo      `json:"system"`
+	CPUCount          int             `json:"cpuCount"`
+	CPUPercent        float64         `json:"cpuPercent"`
+	Load              [3]float64      `json:"load"`
+	MemoryTotalBytes  uint64          `json:"memoryTotalBytes"`
+	MemoryUsedBytes   uint64          `json:"memoryUsedBytes"`
+	SwapTotalBytes    uint64          `json:"swapTotalBytes"`
+	SwapUsedBytes     uint64          `json:"swapUsedBytes"`
+	DiskTotalBytes    uint64          `json:"diskTotalBytes"`
+	DiskUsedBytes     uint64          `json:"diskUsedBytes"`
+	Network           Network         `json:"network"`
+	Temperatures      []Temperature   `json:"temperatures"`
+	Fans              []Fan           `json:"fans"`
+	Power             PowerInfo       `json:"power"`
+	StorageDevices    []StorageDevice `json:"storageDevices"`
+	UptimeSeconds     float64         `json:"uptimeSeconds"`
+	CollectionWarning string          `json:"collectionWarning,omitempty"`
 }
 
 func percent(used, total uint64) float64 {
